@@ -128,7 +128,7 @@ def plan_node(s: CustomerState) -> dict:
     def template_plan() -> list[ToolStep]:
         steps: list[ToolStep] = []
         if qtype == "compare" and len(entities) >= 2:
-            for name in entities[:2]:
+            for name in entities[:4]:
                 steps.append(ToolStep("get_profile", {"name": name}))
                 steps.append(ToolStep("search_book", {"query": f"{name} {q}", "k": 3}))
         elif qtype == "plot":
@@ -139,6 +139,11 @@ def plan_node(s: CustomerState) -> dict:
         else:
             steps.append(ToolStep("search_book", {"query": q, "k": 5}))
         return steps
+
+    if cfg.PLAN_MODE == "rules":
+        steps = template_plan()
+        log.flow(f"  plan｜规则模板，跳过模型｜计划={[st.tool for st in steps]}")
+        return {"plan": steps}
 
     if not _budget_ok(s):
         log.recovery(f"plan｜LLM 预算用尽，降级为模板计划")

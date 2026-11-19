@@ -45,6 +45,11 @@ PLOT_MAX_TOKENS = 800    #1200 情节梳理的输出上限，防止长文拖慢�
 GENERAL_FALLBACK = os.getenv("CS_GENERAL_FALLBACK", "0") == "1"
 HISTORY_WINDOW = 6        # 每个会话保留最近 3 轮消息
 
+# ---- LLM 调用控制 ----
+# rules：按问题类型用规则模板生成工具计划（Agent 路径少 1 次调用）
+# llm：让模型生成计划（更灵活，多 1 次调用）
+PLAN_MODE = os.getenv("CS_PLAN_MODE", "rules")
+
 # ---- 防循环上限 ----
 MAX_RETRY = 2             # 环 A（补证据）最大重试次数
 MAX_REPAIR = 1            # 环 B（修答案）最大修复次数
