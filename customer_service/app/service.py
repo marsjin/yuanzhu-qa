@@ -1,0 +1,135 @@
+"""HTTP 服务：POST /chat（JSON 或 SSE 流式）、GET /health、POST /session/{id}/reset。
+
+启动：
+    uvicorn customer_service.app.service:app --reload
+"""
+
+from __future__ import annotations
+
+import json
+import queue
+import threading
+from contextlib import asynccontextmanager
+from typing import Iterator
+
+from fastapi import FastAPI
+from fastapi.responses import StreamingResponse
+from pydantic import BaseModel, Field
+
+from customer_service.core import config as cfg
+from customer_service.retrieval import index as ridx
+from customer_service.app.pipeline import AnswerResult, ChatPipeline
+from customer_service.core.session import SessionStore
+
+_state: dict = {}
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    idx = ridx.build_index()
+    _state["pipeline"] = ChatPipeline(idx, SessionStore())
+    _state["stats"] = ridx.stats(idx)
+    yield
+    _state.clear()
+
+
+app = FastAPI(title=f"《{cfg.BOOK_NAME}》智能客服", version="0.1.0", lifespan=lifespan)
+
+
+class ChatRequest(BaseModel):
+    session_id: str = Field(min_length=1, description="会话 ID，用于多轮上下文")
+    message: str = Field(min_length=1, description="用户问题")
+    stream: bool = Field(default=False, description="true 时返回 SSE 事件流")
+
+
+class ChatResponse(BaseModel):
+    text: str
+    label: str
+    route: str
+    intent: str
+    handoff: bool
+    citations: list[str]
+    latency_ms: int
+    trace_id: str
+    session_id: str
+
+
+class ResetResponse(BaseModel):
+    ok: bool
+    session_id: str
+
+
+def _pipeline() -> ChatPipeline:
+    return _state["pipeline"]
+
+
+def _to_response(r: AnswerResult) -> ChatResponse:
+    return ChatResponse(
+        text=r.text, label=r.label, route=r.route, intent=r.intent, handoff=r.handoff,
+        citations=r.citations, latency_ms=r.latency_ms, trace_id=r.trace_id,
+        session_id=r.session_id,
+    )
+
+
+def _event(payload: dict) -> str:
+    return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
+
+
+def _sse(pipeline: ChatPipeline, req: ChatRequest) -> Iterator[str]:
+    """后台线程跑完整流程，主线程把 token 推给客户端。"""
+    q: queue.Queue[tuple[str, str | None]] = queue.Queue()
+    holder: dict = {}
+
+    def emit(token: str) -> None:
+        q.put(("delta", token))
+
+    def run() -> None:
+        try:
+            holder["result"] = pipeline.answer(req.session_id, req.message, on_token=emit)
+        except Exception as e:  # 兜底：不让单个请求打断事件流
+            holder["error"] = f"{type(e).__name__}: {e}"
+        finally:
+            q.put(("end", None))
+
+    threading.Thread(target=run, daemon=True).start()
+
+    while True:
+        kind, payload = q.get()
+        if kind == "end":
+            break
+        yield _event({"type": "delta", "content": payload})
+
+    result = holder.get("result")
+    if result is None:
+        yield _event({"type": "error", "message": holder.get("error", "unknown error")})
+        return
+    yield _event({
+        "type": "done", "text": result.text, "label": result.label,
+        "route": result.route, "intent": result.intent, "handoff": result.handoff,
+        "citations": result.citations, "latency_ms": result.latency_ms,
+        "trace_id": result.trace_id, "session_id": result.session_id,
+    })
+
+
+@app.post("/chat", response_model=ChatResponse)
+def chat(req: ChatRequest):
+    pipeline = _pipeline()
+    if req.stream:
+        return StreamingResponse(_sse(pipeline, req), media_type="text/event-stream")
+    return _to_response(pipeline.answer(req.session_id, req.message))
+
+
+@app.get("/health")
+def health() -> dict:
+    return {
+        "status": "ok",
+        "book": cfg.BOOK_NAME,
+        "index": _state.get("stats", {}),
+        "llm_configured": bool(cfg.LLM_API_KEY),
+    }
+
+
+@app.post("/session/{session_id}/reset", response_model=ResetResponse)
+def reset_session(session_id: str) -> ResetResponse:
+    _pipeline().store.reset(session_id)
+    return ResetResponse(ok=True, session_id=session_id)
