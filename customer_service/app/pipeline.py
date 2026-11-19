@@ -18,6 +18,7 @@ from customer_service.agent.graph import run_agent
 from customer_service.generation.fast_path import answer as fast_answer
 from customer_service.generation.llm import build_llm
 from customer_service.policy.routing import detect_intent, has_pronoun, needs_agent
+from customer_service.policy.scope import is_out_of_scope
 from customer_service.core.session import SessionStore
 
 _CITE_FMT = re.compile(r"《([^》]+)》第([一二三四五六七八九十百零两0-9]+)章")
@@ -83,6 +84,13 @@ class ChatPipeline:
             text = entry.get("answer", P.REFUSAL_TEXT)
             result = AnswerResult(text, "来源：客服知识库", "faq", intent,
                                   trace_id=trace_id, session_id=session_id)
+            self._persist(session_id, message, result.text, entities)
+            return self._finish(result, t0)
+
+        if is_out_of_scope(message, entities):
+            log.flow("  route｜命中域外话题门控")
+            result = AnswerResult(P.REFUSAL_TEXT, "来源：无（超出服务范围）", "fast", intent,
+                                  handoff=True, trace_id=trace_id, session_id=session_id)
             self._persist(session_id, message, result.text, entities)
             return self._finish(result, t0)
 

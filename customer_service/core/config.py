@@ -26,7 +26,7 @@ SESSION_DB_PATH = Path(os.getenv("CS_SESSION_DB", BASE_DIR / ".sessions.db"))
 CHUNK_SIZE = 600          # 片段最大字符数；改动后需 --rebuild
 CHUNK_OVERLAP = 80        # 相邻片段重叠字符数
 TOP_K = 5                 # 单次检索返回片段数
-PLOT_SPINE_N = 24         # 情节梳理的章节采样数
+PLOT_SPINE_N = 10         #14 情节梳理的章节采样数（越大越慢，14 覆盖 47 章约每 3 章 1 点）
 COVERAGE_THRESHOLD = 0.5  # 覆盖率 ≥ 此值才认为原文能回答
 OUT_OF_CORPUS_THRESHOLD = 0.2  # 覆盖率低于此值直接判为超出语料
 MIN_TOKEN_LEN = 2         # 参与检索的最短词长度
@@ -37,6 +37,7 @@ LLM_BASE_URL = os.getenv("LLM_BASE_URL", "https://api.deepseek.com/v1")
 LLM_API_KEY = os.getenv("DEEPSEEK_API_KEY") or os.getenv("OPENAI_API_KEY")
 LLM_TEMPERATURE = 0.2
 LLM_TIMEOUT = 60
+PLOT_MAX_TOKENS = 800    #1200 情节梳理的输出上限，防止长文拖慢响应
 
 # ---- 客服策略 ----
 # 0：原文无据时直接拒答并建议转人工（客服默认）

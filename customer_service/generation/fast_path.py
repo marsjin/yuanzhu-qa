@@ -98,8 +98,11 @@ def answer(question: str, index: ridx.RagIndex, llm: ChatOpenAI,
     if intent == "compare":
         payload["profiles"] = "\n".join(kb.profile_text(n) for n in entities[:2])
 
-    text = stream_collect(_build_chain(llm, system, with_profiles=(intent == "compare")),
-                          payload, on_token=on_token).strip()
+    if intent == "plot":
+        chain = _build_chain(llm.bind(max_tokens=cfg.PLOT_MAX_TOKENS), system)
+    else:
+        chain = _build_chain(llm, system, with_profiles=(intent == "compare"))
+    text = stream_collect(chain, payload, on_token=on_token).strip()
 
     if "【原文未提及】" in text:
         label = "来源：原文未覆盖 + 大模型补充（非原文内容）"
