@@ -1,5 +1,6 @@
 services:
   customer-service:
+    image: customer-service:latest
     build: .
     env_file: .env
     environment:
