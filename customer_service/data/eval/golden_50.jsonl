@@ -35,7 +35,7 @@
 {"id":"mt-03","type":"multi_turn","pre":"欧阳雪开什么店？","question":"她和芮小丹是什么关系？","keywords":["芮小丹","朋友"],"expected_route":"fast","no_answer":false}
 {"id":"mt-04","type":"multi_turn","pre":"介绍一下格律诗公司","question":"它和乐圣的官司结果如何？","keywords":["乐圣"],"expected_route":"fast","no_answer":false}
 {"id":"mt-05","type":"multi_turn","pre":"刘冰是谁？","question":"他最后怎么样了？","keywords":["刘冰"],"expected_route":"fast","no_answer":false}
-{"id":"mt-06","type":"multi_turn","pre":"这本书是谁写的？","question":"她还有别的作品吗？","keywords":["豆豆"],"expected_route":"faq","no_answer":false}
+{"id":"mt-06","type":"multi_turn","pre":"这本书是谁写的？","question":"那有电子版吗？","keywords":["电子","阅读"],"expected_route":"faq","no_answer":false}
 {"id":"faq-02","type":"faq","question":"有电子版吗？","keywords":["电子","阅读"],"expected_route":"faq","no_answer":false}
 {"id":"faq-03","type":"faq","question":"作者是谁？","keywords":["豆豆"],"expected_route":"faq","no_answer":false}
 {"id":"faq-04","type":"faq","question":"这本书改编成电视剧了吗？","keywords":["电视剧","改编","天道"],"expected_route":"faq","no_answer":false}
