@@ -69,7 +69,16 @@ def _aspect_coverage(evidence: list[Evidence], aspects: list[str]) -> tuple[floa
     return (len(aspects) - len(missing)) / len(aspects), missing
 
 
-def _aspects_covered(evidence: list[Evidence], aspects: list[str], qtype: str) -> bool:
+def _aspects_covered(evidence: list[Evidence], aspects: list[str], qtype: str,
+                     entities: list[str] | None = None) -> bool:
+    """维度是否足够。compare 按「每个人物都有证据」判定，其余按维度词命中。
+
+    compare 的维度（角色定位/核心思想/结局）是给模型的写作要求，不是证据字段，
+    用维度词做 token 命中会误判为不足；真正缺的是某个人物完全没有证据。
+    """
+    if qtype == "compare" and entities:
+        text = "\n".join(e.text for e in evidence)
+        return all(name in text for name in entities)
     ratio, _ = _aspect_coverage(evidence, aspects)
     if qtype in ("aggregate", "multi_hop"):
         return not aspects or ratio > 0
@@ -202,7 +211,8 @@ def grade_node(s: CustomerState) -> dict:
 
     if not evidence or coverage < cfg.OUT_OF_CORPUS_THRESHOLD:
         verdict = "out_of_corpus"
-    elif coverage >= cfg.COVERAGE_THRESHOLD and _aspects_covered(evidence, aspects, qtype):
+    elif coverage >= cfg.COVERAGE_THRESHOLD and _aspects_covered(
+            evidence, aspects, qtype, s.get("entities", [])):
         verdict = "sufficient"
     else:
         verdict = "insufficient" if retry < MAX_RETRY else "out_of_corpus"

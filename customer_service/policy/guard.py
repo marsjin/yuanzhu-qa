@@ -101,7 +101,7 @@ def verify(draft: str, evidence: list[Evidence]) -> VerifyResult:
             result.missing_eids.append(f"E{eid}")
             result.ok = False
 
-    draft_text = CITE_RE.sub("", draft)
+    draft_text = EID_RE.sub("", CITE_RE.sub("", draft))
     for ent in _known_entities():
         if len(ent) < 2 or ent not in draft_text or ent in corpus:
             continue
@@ -110,7 +110,7 @@ def verify(draft: str, evidence: list[Evidence]) -> VerifyResult:
             result.unsupported_entities.append(ent)
             result.ok = False
 
-    for num in NUMBER_RE.findall(draft):
+    for num in NUMBER_RE.findall(draft_text):
         if num not in corpus and num not in labeled:
             result.unsupported_numbers.append(num)
             result.ok = False
