@@ -1,0 +1,298 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>《遥远的救世主》智能客服</title>
+<style>
+  :root {
+    --bg: #f6f5f2;
+    --card: #ffffff;
+    --ink: #1f2328;
+    --muted: #6b7280;
+    --line: #e5e3de;
+    --accent: #8a5a2b;
+    --accent-soft: #f3e9dc;
+    --warn: #b45309;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font: 15px/1.6 -apple-system, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  }
+  .app {
+    height: 100%;
+    max-width: 880px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg);
+  }
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--line);
+    background: rgba(246, 245, 242, 0.92);
+    backdrop-filter: blur(8px);
+    position: sticky;
+    top: 0;
+    z-index: 2;
+  }
+  .brand { display: flex; align-items: center; gap: 12px; }
+  .logo {
+    width: 38px; height: 38px; border-radius: 10px;
+    background: var(--accent); color: #fff;
+    display: grid; place-items: center;
+    font-weight: 700; font-size: 18px;
+  }
+  h1 { margin: 0; font-size: 16px; font-weight: 600; }
+  #status { margin: 2px 0 0; font-size: 12px; color: var(--muted); }
+  button { font: inherit; cursor: pointer; }
+  .ghost {
+    border: 1px solid var(--line); background: transparent; color: var(--muted);
+    padding: 7px 12px; border-radius: 8px;
+  }
+  .ghost:hover { color: var(--ink); border-color: #cfcbc2; }
+  main {
+    flex: 1; overflow-y: auto;
+    padding: 22px 18px 8px;
+    display: flex; flex-direction: column; gap: 14px;
+  }
+  .welcome {
+    margin: auto; text-align: center; color: var(--muted); max-width: 560px;
+  }
+  .welcome p { margin: 0 0 16px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+  .chips button {
+    border: 1px solid var(--line); background: var(--card);
+    padding: 8px 12px; border-radius: 999px; color: var(--ink);
+  }
+  .chips button:hover { border-color: var(--accent); color: var(--accent); }
+  .row { display: flex; }
+  .row.user { justify-content: flex-end; }
+  .row.bot { justify-content: flex-start; }
+  .bubble {
+    max-width: 82%;
+    padding: 11px 14px;
+    border-radius: 14px;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .row.user .bubble { background: var(--accent); color: #fff; border-bottom-right-radius: 4px; }
+  .row.bot .bubble { background: var(--card); border: 1px solid var(--line); border-bottom-left-radius: 4px; }
+  .content.streaming::after {
+    content: "▍"; margin-left: 2px; color: var(--accent);
+    animation: blink 1s steps(1) infinite;
+  }
+  @keyframes blink { 50% { opacity: 0; } }
+  .meta { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .badge {
+    font-size: 11px; line-height: 1.4; padding: 2px 7px;
+    border-radius: 999px; background: #f2f1ee; color: var(--muted);
+  }
+  .badge.cite { background: var(--accent-soft); color: var(--accent); }
+  .badge.warn { background: #fdf1e2; color: var(--warn); }
+  footer {
+    display: flex; gap: 10px; align-items: flex-end;
+    padding: 12px 18px 18px;
+    border-top: 1px solid var(--line);
+    background: var(--bg);
+  }
+  textarea {
+    flex: 1; resize: none; max-height: 120px;
+    padding: 11px 13px; border-radius: 12px;
+    border: 1px solid var(--line); background: var(--card); color: var(--ink);
+    font: inherit; outline: none;
+  }
+  textarea:focus { border-color: var(--accent); }
+  #send {
+    padding: 11px 20px; border: 0; border-radius: 12px;
+    background: var(--accent); color: #fff; font-weight: 600;
+  }
+  #send:disabled { opacity: .5; cursor: default; }
+  @media (max-width: 560px) {
+    .bubble { max-width: 92%; }
+    h1 { font-size: 15px; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="brand">
+      <div class="logo">遥</div>
+      <div>
+        <h1>《遥远的救世主》智能客服</h1>
+        <p id="status">连接中…</p>
+      </div>
+    </div>
+    <button id="reset" class="ghost">清空会话</button>
+  </header>
+
+  <main id="chat">
+    <div class="welcome" id="welcome">
+      <p>你好，我可以依据原著回答人物、情节与常见问题。</p>
+      <div class="chips">
+        <button data-q="丁元英是谁？">丁元英是谁？</button>
+        <button data-q="这本书的主线讲了什么？">主线讲了什么？</button>
+        <button data-q="对比丁元英和韩楚风">对比丁元英和韩楚风</button>
+        <button data-q="这本书改编成电视剧了吗？">有影视改编吗？</button>
+      </div>
+    </div>
+  </main>
+
+  <footer>
+    <textarea id="input" rows="1" placeholder="输入问题，Enter 发送，Shift+Enter 换行"></textarea>
+    <button id="send">发送</button>
+  </footer>
+</div>
+
+<script>
+const chat = document.getElementById('chat');
+const input = document.getElementById('input');
+const sendBtn = document.getElementById('send');
+const statusEl = document.getElementById('status');
+
+let sessionId = sessionStorage.getItem('cs_sid');
+if (!sessionId) {
+  sessionId = 'web-' + Math.random().toString(36).slice(2, 10);
+  sessionStorage.setItem('cs_sid', sessionId);
+}
+let busy = false;
+
+fetch('/health')
+  .then(r => r.json())
+  .then(d => {
+    statusEl.textContent = `已就绪｜${d.index.chapters} 章 / ${d.index.chunks} 片段`
+      + (d.llm_configured ? '' : '｜未配置 API Key');
+  })
+  .catch(() => { statusEl.textContent = '服务未连接'; });
+
+function el(tag, cls, text) {
+  const node = document.createElement(tag);
+  if (cls) node.className = cls;
+  if (text !== undefined) node.textContent = text;
+  return node;
+}
+
+function scrollBottom() { chat.scrollTop = chat.scrollHeight; }
+
+function addUser(text) {
+  const row = el('div', 'row user');
+  row.appendChild(el('div', 'bubble', text));
+  chat.appendChild(row);
+  scrollBottom();
+}
+
+function addAssistant() {
+  const row = el('div', 'row bot');
+  const bubble = el('div', 'bubble');
+  const content = el('div', 'content');
+  const meta = el('div', 'meta');
+  bubble.append(content, meta);
+  row.appendChild(bubble);
+  chat.appendChild(row);
+  scrollBottom();
+  return { content, meta };
+}
+
+function renderMeta(meta, d) {
+  meta.textContent = '';
+  meta.appendChild(el('span', 'badge', `路由 ${d.route}`));
+  meta.appendChild(el('span', 'badge', `意图 ${d.intent}`));
+  meta.appendChild(el('span', 'badge', `${d.latency_ms}ms`));
+  (d.citations || []).forEach(c => meta.appendChild(el('span', 'badge cite', c)));
+  if (d.handoff) meta.appendChild(el('span', 'badge warn', '已建议转人工'));
+}
+
+async function send(text) {
+  const question = (text || '').trim();
+  if (!question || busy) return;
+  busy = true;
+  sendBtn.disabled = true;
+  const welcome = document.getElementById('welcome');
+  if (welcome) welcome.remove();
+
+  addUser(question);
+  const { content, meta } = addAssistant();
+  content.classList.add('streaming');
+
+  try {
+    const res = await fetch('/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ session_id: sessionId, message: question, stream: true }),
+    });
+    if (!res.ok || !res.body) throw new Error('HTTP ' + res.status);
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const parts = buffer.split('\n\n');
+      buffer = parts.pop();
+      for (const part of parts) {
+        const line = part.trim();
+        if (!line.startsWith('data:')) continue;
+        const data = JSON.parse(line.slice(5).trim());
+        if (data.type === 'delta') {
+          content.textContent += data.content;
+          scrollBottom();
+        } else if (data.type === 'done') {
+          if (!content.textContent) content.textContent = data.text;
+          renderMeta(meta, data);
+        } else if (data.type === 'error') {
+          content.textContent = '出错了：' + data.message;
+        }
+      }
+    }
+    if (!content.textContent) content.textContent = '（空回答）';
+  } catch (err) {
+    content.textContent = '请求失败：' + err.message;
+  } finally {
+    content.classList.remove('streaming');
+    busy = false;
+    sendBtn.disabled = false;
+    scrollBottom();
+  }
+}
+
+function submit() {
+  const text = input.value;
+  input.value = '';
+  input.style.height = 'auto';
+  send(text);
+}
+
+sendBtn.addEventListener('click', submit);
+input.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    submit();
+  }
+});
+input.addEventListener('input', () => {
+  input.style.height = 'auto';
+  input.style.height = Math.min(input.scrollHeight, 120) + 'px';
+});
+
+document.querySelectorAll('.chips button').forEach(btn => {
+  btn.addEventListener('click', () => send(btn.dataset.q));
+});
+
+document.getElementById('reset').addEventListener('click', async () => {
+  await fetch(`/session/${encodeURIComponent(sessionId)}/reset`, { method: 'POST' });
+  location.reload();
+});
+</script>
+</body>
+</html>

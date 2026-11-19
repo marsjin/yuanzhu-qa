@@ -13,7 +13,8 @@ from contextlib import asynccontextmanager
 from typing import Iterator
 
 from fastapi import FastAPI
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from customer_service.core import config as cfg
@@ -133,3 +134,13 @@ def health() -> dict:
 def reset_session(session_id: str) -> ResetResponse:
     _pipeline().store.reset(session_id)
     return ResetResponse(ok=True, session_id=session_id)
+
+
+STATIC_DIR = cfg.BASE_DIR / "app" / "static"
+if STATIC_DIR.exists():
+    app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
+
+@app.get("/", include_in_schema=False)
+def web_chat() -> FileResponse:
+    return FileResponse(STATIC_DIR / "index.html")
