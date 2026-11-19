@@ -6,14 +6,17 @@
 
 from __future__ import annotations
 
+import base64
+import binascii
 import json
 import queue
+import secrets
 import threading
 from contextlib import asynccontextmanager
 from typing import Iterator
 
-from fastapi import FastAPI
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi import FastAPI, Request
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -35,6 +38,35 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title=f"《{cfg.BOOK_NAME}》智能客服", version="0.1.0", lifespan=lifespan)
+
+
+def _valid_basic_auth(header: str | None) -> bool:
+    if not header:
+        return False
+    scheme, _, encoded = header.partition(" ")
+    if scheme.lower() != "basic":
+        return False
+    try:
+        decoded = base64.b64decode(encoded, validate=True).decode("utf-8")
+    except (binascii.Error, UnicodeDecodeError):
+        return False
+    username, separator, password = decoded.partition(":")
+    return bool(separator) and secrets.compare_digest(
+        username.encode("utf-8"), cfg.AUTH_USERNAME.encode("utf-8")
+    ) and secrets.compare_digest(
+        password.encode("utf-8"), cfg.AUTH_PASSWORD.encode("utf-8")
+    )
+
+
+@app.middleware("http")
+async def require_auth(request: Request, call_next):
+    if cfg.AUTH_ENABLED and not _valid_basic_auth(request.headers.get("Authorization")):
+        return JSONResponse(
+            status_code=401,
+            content={"detail": "需要鉴权"},
+            headers={"WWW-Authenticate": 'Basic realm="customer-service", charset="UTF-8"'},
+        )
+    return await call_next(request)
 
 
 class ChatRequest(BaseModel):

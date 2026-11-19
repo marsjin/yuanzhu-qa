@@ -39,6 +39,11 @@ LLM_TEMPERATURE = 0.2
 LLM_TIMEOUT = 60
 PLOT_MAX_TOKENS = 800    #1200 情节梳理的输出上限，防止长文拖慢响应
 
+# ---- HTTP 鉴权 ----
+AUTH_USERNAME = os.getenv("CS_AUTH_USERNAME", "admin")
+AUTH_PASSWORD = os.getenv("CS_AUTH_PASSWORD", "change-me-admin")
+AUTH_ENABLED = bool(AUTH_PASSWORD)  # 配置密码后，页面与全部接口均要求 HTTP Basic 鉴权
+
 # ---- 客服策略 ----
 # 0：原文无据时直接拒答并建议转人工（客服默认）
 # 1：允许模型用通用知识补充，但强制打【非原文内容】标注
