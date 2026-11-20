@@ -69,12 +69,15 @@ def _to_evidence(hits: list[ridx.Hit], tool: str) -> list[Evidence]:
 # ---------------------------------------------------------------------------
 def search_book(query: str, chapter_range: list[int] | tuple[int, int] | None = None,
                 k: int = 5) -> list[Evidence]:
-    """BM25 检索，可限定章节范围。"""
+    """BM25 检索；问题里出现「第X章」时自动限定到该章。"""
+    index = _get_index()
     cr = None
     if chapter_range:
         lo, hi = int(chapter_range[0]), int(chapter_range[1])
         cr = (lo, hi)
-    hits = ridx.search(query, _get_index(), k=k, coverage_query=query, chapter_range=cr)
+    else:
+        cr = ridx.chapter_range_of(index, query)
+    hits = ridx.search(query, index, k=k, coverage_query=query, chapter_range=cr)
     return _to_evidence(hits, "search_book")
 
 

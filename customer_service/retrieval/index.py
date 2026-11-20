@@ -39,13 +39,21 @@ class RagIndex:
                    token_sets=[set(t) for t in tokens])
 
 
+def doc_tokens(doc: Document) -> list[str]:
+    """片段分词：把章节标题并入词表，让「第X章」成为可检索的 token。
+
+    只影响检索用的 tokens，不改 page_content，因此回答与摘录不会出现前缀。
+    """
+    return tokenize(f"{doc.metadata.get('chapter', '')} {doc.page_content}")
+
+
 def build_index(force: bool = False) -> RagIndex:
     """构建并持久化索引；已存在时直接加载。"""
     if cfg.INDEX_PATH.exists() and not force:
         return load_index()
 
     docs, meta = split_corpus()
-    tokens = [tokenize(d.page_content) for d in docs]
+    tokens = [doc_tokens(d) for d in docs]
 
     cfg.INDEX_DIR.mkdir(parents=True, exist_ok=True)
     with cfg.INDEX_PATH.open("wb") as f:
@@ -146,6 +154,20 @@ def chapter_chunks(index: RagIndex, seq: int, limit: int | None = None) -> list[
     docs = [d for d in index.docs if d.metadata.get("chapter_seq") == seq]
     docs.sort(key=lambda d: d.metadata.get("chunk_index", 0))
     return docs[:limit] if limit else docs
+
+
+def chapter_range_of(index: RagIndex, question: str) -> tuple[int, int] | None:
+    """把问题里的章号解析成 (最小 seq, 最大 seq)，支持「从第X章到第Y章」。"""
+    numbers = {cn_to_int(raw) for raw in CHAPTER_QUERY_RE.findall(question)}
+    targets = {n for n in numbers if n is not None}
+    if not targets:
+        return None
+    seqs: list[int] = []
+    for seq, title in chapter_titles(index):
+        match = CHAPTER_QUERY_RE.search(title)
+        if match and cn_to_int(match.group(1)) in targets:
+            seqs.append(seq)
+    return (min(seqs), max(seqs)) if seqs else None
 
 
 def sample_plot_spine(index: RagIndex, n: int = cfg.PLOT_SPINE_N) -> list[Hit]:

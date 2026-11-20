@@ -41,14 +41,17 @@ def format_context(hits: list[ridx.Hit]) -> str:
 
 def retrieve(question: str, retrieval_query: str, intent: str,
              entities: list[str], index: ridx.RagIndex) -> list[ridx.Hit]:
+    chapter_range = ridx.chapter_range_of(index, question)
     if intent == "compare":
         hits: list[ridx.Hit] = []
         for name in entities[:2]:
-            hits += ridx.search(f"{name} {question}", index, k=3, coverage_query=question)
+            hits += ridx.search(f"{name} {question}", index, k=3,
+                                coverage_query=question, chapter_range=chapter_range)
         return hits
     if intent == "plot":
         return ridx.sample_plot_spine(index, n=cfg.PLOT_SPINE_N)
-    return ridx.search(retrieval_query, index, coverage_query=question)
+    return ridx.search(retrieval_query, index, coverage_query=question,
+                       chapter_range=chapter_range)
 
 
 def _build_chain(llm: ChatOpenAI, system: str, with_profiles: bool = False):

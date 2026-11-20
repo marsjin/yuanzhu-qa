@@ -11,8 +11,7 @@ from langchain_core.documents import Document
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
-from customer_service.retrieval.corpus import tokenize  # noqa: E402
-from customer_service.retrieval.index import RagIndex  # noqa: E402
+from customer_service.retrieval.index import RagIndex, doc_tokens  # noqa: E402
 
 _SAMPLE = [
     ("第一章", 0, "丁元英是私募基金的操盘手，后来隐居古城。"),
@@ -31,4 +30,4 @@ def tiny_index() -> RagIndex:
         )
         for chapter, seq, text in _SAMPLE
     ]
-    return RagIndex.create(docs, [tokenize(d.page_content) for d in docs])
+    return RagIndex.create(docs, [doc_tokens(d) for d in docs])

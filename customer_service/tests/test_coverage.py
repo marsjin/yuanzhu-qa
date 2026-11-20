@@ -9,9 +9,9 @@ from customer_service.retrieval.index import decide_mode, query_weights, search
 
 
 def test_oov_terms_get_ceiling_weight(tiny_index):
-    """未登录词（正文里没有「第一章」）按上限计权，权重高于普通词。"""
-    weights = query_weights(tiny_index, ["第一章", "私募"])
-    assert weights["第一章"] > weights["私募"]
+    """语料里完全没有的词按上限计权，权重高于普通词。"""
+    weights = query_weights(tiny_index, ["量子纠缠", "私募"])
+    assert weights["量子纠缠"] > weights["私募"]
 
 
 def test_generic_word_alone_cannot_pass(tiny_index):

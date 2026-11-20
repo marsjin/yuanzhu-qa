@@ -9,8 +9,10 @@ from customer_service.policy.routing import detect_intent
 from customer_service.retrieval.corpus import cn_to_int
 from customer_service.retrieval.index import (
     chapter_chunks,
+    chapter_range_of,
     chapter_seq_of,
     chapter_titles,
+    search,
 )
 
 
@@ -81,3 +83,22 @@ def test_chapter_out_of_range(tiny_index):
     result = fast_path.answer("第99章内容", tiny_index, _NoLLM(), [], "chapter", [])
     assert "未找到" in result.text
     assert result.mode == "refusal"
+
+
+def test_chapter_title_is_searchable(tiny_index):
+    """章节标题进入 tokens 后，「第X章」可被 BM25 命中。"""
+    hits = search("第一章", tiny_index)
+    assert hits
+    assert hits[0].doc.metadata["chapter"] == "第一章"
+
+
+def test_chapter_range_of_supports_span(tiny_index):
+    assert chapter_range_of(tiny_index, "第一章内容") == (0, 0)
+    assert chapter_range_of(tiny_index, "从第一章到第三章") == (0, 2)
+    assert chapter_range_of(tiny_index, "丁元英是谁") is None
+
+
+def test_search_respects_chapter_range(tiny_index):
+    hits = search("丁元英", tiny_index, chapter_range=(0, 0))
+    assert hits
+    assert all(h.doc.metadata["chapter_seq"] == 0 for h in hits)
