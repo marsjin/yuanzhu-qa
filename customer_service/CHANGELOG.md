@@ -1,5 +1,19 @@
 # 变更与部署记录
 
+## 运行环境
+
+本地统一使用 **Python 3.11**（`conda activate pythonPro311`），与生产镜像 `python:3.11-slim` 一致。
+
+```bash
+cd customer_service
+python run.py -q "本书简介"                 # CLI
+python run_service.py --port 8019          # HTTP 服务
+PYTHONPATH=.. python -m pytest tests -q    # 单测
+```
+
+> 项目根目录的 `.venv`（Python 3.13）已删除：3.13 下没有 `onnxruntime` 轮子，装不了 `fastembed`，
+> 跑起来会静默降级为纯 BM25。向量能力依赖 3.11 环境。
+
 ## v0.1.0 — 2026-11-19 首次部署成功
 
 服务已部署至服务器并通过公网验收。
