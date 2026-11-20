@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>管理后台 · 《遥远的救世主》智能客服</title>
+<style>
+  :root {
+    --bg: #f6f5f2;
+    --card: #ffffff;
+    --ink: #1f2328;
+    --muted: #6b7280;
+    --line: #e5e3de;
+    --accent: #8a5a2b;
+    --accent-soft: #f3e9dc;
+    --warn: #b45309;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 0 16px 40px;
+    background: var(--bg); color: var(--ink);
+    font: 15px/1.6 -apple-system, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  }
+  .wrap { max-width: 880px; margin: 0 auto; }
+  header {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 16px 0; border-bottom: 1px solid var(--line); margin-bottom: 20px;
+  }
+  header h1 { font-size: 17px; margin: 0; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .card {
+    background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+    padding: 16px 18px; margin-bottom: 16px;
+  }
+  .card h2 {
+    font-size: 14px; margin: 0 0 12px; display: flex;
+    align-items: center; justify-content: space-between; gap: 10px;
+  }
+  .card h2 span.raw { font-size: 12px; font-weight: 400; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; }
+  .item { background: var(--bg); border-radius: 8px; padding: 10px 12px; }
+  .item .k { font-size: 12px; color: var(--muted); }
+  .item .v { font-size: 16px; margin-top: 2px; word-break: break-all; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--line); }
+  th { color: var(--muted); font-weight: 500; font-size: 12px; }
+  td.num { font-variant-numeric: tabular-nums; }
+  .tabs { display: flex; gap: 8px; margin-bottom: 12px; }
+  .tabs button {
+    border: 1px solid var(--line); background: var(--card); color: var(--ink);
+    padding: 4px 12px; border-radius: 999px; font-size: 12px; cursor: pointer;
+  }
+  .tabs button.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+  .note { font-size: 12px; color: var(--muted); margin-top: 10px; }
+  .err { color: var(--warn); font-size: 13px; }
+  footer { font-size: 12px; color: var(--muted); text-align: center; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>管理后台</h1>
+    <span>
+      <a href="/logout">退出登录</a>
+      &nbsp;·&nbsp;
+      <a href="/">← 返回对话首页</a>
+    </span>
+  </header>
+
+  <section class="card">
+    <h2>事件统计 <span class="raw"><a id="stats-raw" href="/events/stats?days=7" target="_blank" rel="noopener">打开原始 JSON</a></span></h2>
+    <div class="tabs" id="tabs">
+      <button data-days="1">近 1 天</button>
+      <button data-days="7" class="on">近 7 天</button>
+      <button data-days="30">近 30 天</button>
+    </div>
+    <div id="stats"></div>
+    <p class="note">展示次数按入口拆分：默认 = 首页封面卡；查询 = 回答中的来源徽标。</p>
+  </section>
+
+  <section class="card">
+    <h2>服务健康 <span class="raw"><a href="/health" target="_blank" rel="noopener">打开原始 JSON</a></span></h2>
+    <div id="health" class="grid"><div class="item"><div class="k">状态</div><div class="v">读取中…</div></div></div>
+  </section>
+
+  <footer>本页仅提供查看，不含任何写操作</footer>
+</div>
+
+<script>
+const healthEl = document.getElementById('health');
+const statsEl = document.getElementById('stats');
+const tabsEl = document.getElementById('tabs');
+let days = 7;
+
+function el(tag, cls, text) {
+  const n = document.createElement(tag);
+  if (cls) n.className = cls;
+  if (text !== undefined) n.textContent = text;
+  return n;
+}
+
+function item(key, value) {
+  const box = el('div', 'item');
+  const k = el('div', 'k', key);
+  const v = el('div', 'v', value);
+  v.title = String(value);
+  box.append(k, v);
+  return box;
+}
+
+async function loadHealth() {
+  try {
+    const d = await (await fetch('/health')).json();
+    const idx = d.index || {};
+    healthEl.replaceChildren(
+      item('状态', d.status),
+      item('书名', d.book || '-'),
+      item('章节', idx.chapters ?? '-'),
+      item('片段', idx.chunks ?? '-'),
+      item('词表', idx.vocab ?? '-'),
+      item('模型', d.llm_configured ? '已配置' : '未配置'),
+      item('封面', d.cover ? '已加载' : '缺失'),
+      item('来源链接', d.douban || '-')
+    );
+  } catch (e) {
+    healthEl.replaceChildren(el('div', 'err', '读取失败：' + e.message));
+  }
+}
+
+function row(label, shown, clicked, ctr) {
+  const tr = el('tr');
+  tr.append(
+    el('td', '', label),
+    el('td', 'num', shown),
+    el('td', 'num', clicked),
+    el('td', 'num', (ctr * 100).toFixed(1) + '%')
+  );
+  return tr;
+}
+
+async function loadStats() {
+  try {
+    const d = await (await fetch('/events/stats?days=' + days)).json();
+    const table = el('table');
+    const head = el('tr');
+    ['入口', '展示', '点击', '点击率'].forEach((t, i) => {
+      const th = el('th', i ? 'num' : '', t);
+      head.appendChild(th);
+    });
+    const body = el('tbody');
+    body.append(
+      row('默认（首页封面）', d.impressions.default, d.clicks.default, d.ctr.default),
+      row('查询（回答徽标）', d.impressions.answer, d.clicks.answer, d.ctr.answer)
+    );
+    table.append(el('thead'), body);
+    table.querySelector('thead').appendChild(head);
+    statsEl.replaceChildren(table);
+    document.getElementById('stats-raw').href = '/events/stats?days=' + days;
+  } catch (e) {
+    statsEl.replaceChildren(el('div', 'err', '读取失败：' + e.message));
+  }
+}
+
+tabsEl.addEventListener('click', (ev) => {
+  const btn = ev.target.closest('button');
+  if (!btn) return;
+  days = Number(btn.dataset.days);
+  [...tabsEl.children].forEach(b => b.classList.toggle('on', b === btn));
+  loadStats();
+});
+
+loadHealth();
+loadStats();
+</script>
+</body>
+</html>

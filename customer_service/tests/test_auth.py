@@ -1,4 +1,4 @@
-"""HTTP Basic 鉴权测试。"""
+"""HTTP Basic 鉴权与角色测试。"""
 
 import base64
 
@@ -15,12 +15,23 @@ def _header(username: str, password: str) -> str:
 
 @pytest.fixture(autouse=True)
 def _credentials(monkeypatch):
-    monkeypatch.setattr(cfg, "AUTH_USERNAME", "admin")
-    monkeypatch.setattr(cfg, "AUTH_PASSWORD", "s3cret")
+    monkeypatch.setattr(cfg, "AUTH_ADMIN_USERNAME", "admin")
+    monkeypatch.setattr(cfg, "AUTH_ADMIN_PASSWORD", "s3cret")
+    monkeypatch.setattr(cfg, "AUTH_USER_USERNAME", "user")
+    monkeypatch.setattr(cfg, "AUTH_USER_PASSWORD", "change-me-user")
+    monkeypatch.setattr(cfg, "AUTH_EXTRA_USERS", "jerry:change-me-extra")
 
 
-def test_valid_credentials():
-    assert service._valid_basic_auth(_header("admin", "s3cret"))
+def test_admin_role():
+    assert service._auth_role(_header("admin", "s3cret")) == "admin"
+
+
+def test_user_role():
+    assert service._auth_role(_header("user", "change-me-user")) == "user"
+
+
+def test_extra_user_role():
+    assert service._auth_role(_header("jerry", "change-me-extra")) == "user"
 
 
 @pytest.mark.parametrize(
@@ -31,14 +42,16 @@ def test_valid_credentials():
         "Bearer token",
         "Basic not-base64",
         _header("admin", "wrong"),
+        _header("user", "s3cret"),
+        _header("jerry", "change-me-user"),
         _header("other", "s3cret"),
         _header("admin", ""),
     ],
 )
 def test_invalid_credentials(header):
-    assert not service._valid_basic_auth(header)
+    assert service._auth_role(header) is None
 
 
 def test_unicode_credentials(monkeypatch):
-    monkeypatch.setattr(cfg, "AUTH_PASSWORD", "强密码")
-    assert service._valid_basic_auth(_header("admin", "强密码"))
+    monkeypatch.setattr(cfg, "AUTH_ADMIN_PASSWORD", "强密码")
+    assert service._auth_role(_header("admin", "强密码")) == "admin"

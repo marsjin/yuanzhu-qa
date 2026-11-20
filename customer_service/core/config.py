@@ -78,9 +78,38 @@ def douban_url() -> str:
     return urlunsplit(parts._replace(query=urlencode(query)))
 
 # ---- HTTP 鉴权 ----
-AUTH_USERNAME = os.getenv("CS_AUTH_USERNAME", "admin")
-AUTH_PASSWORD = os.getenv("CS_AUTH_PASSWORD", "change-me-admin")
-AUTH_ENABLED = bool(AUTH_PASSWORD)  # 配置密码后，页面与全部接口均要求 HTTP Basic 鉴权
+AUTH_ADMIN_USERNAME = os.getenv("CS_AUTH_USERNAME", "admin")
+AUTH_ADMIN_PASSWORD = os.getenv("CS_AUTH_PASSWORD", "change-me-admin")
+AUTH_USER_USERNAME = os.getenv("CS_AUTH_USER_USERNAME", "user")
+AUTH_USER_PASSWORD = os.getenv("CS_AUTH_USER_PASSWORD", "change-me-user")
+# 额外的 user 角色账号，格式 name:password，多个用英文逗号分隔
+AUTH_EXTRA_USERS = os.getenv("CS_AUTH_EXTRA_USERS", "jerry:change-me-extra")
+AUTH_ENABLED = bool(AUTH_ADMIN_PASSWORD)  # 配置管理员密码后，页面与全部接口均要求鉴权
+AUTH_SESSION_MINUTES = int(os.getenv("CS_AUTH_SESSION_MINUTES", "60"))  # 登录有效期
+AUTH_COOKIE_NAME = "cs_web_session"
+
+
+def _parse_extra_users(raw: str) -> dict[str, str]:
+    """把 name:password,name:password 解析成字典；忽略格式不完整的条目。"""
+    users: dict[str, str] = {}
+    for item in raw.split(","):
+        name, separator, password = item.partition(":")
+        name = name.strip()
+        if separator and name and password:
+            users[name] = password
+    return users
+
+
+def auth_users() -> dict[str, tuple[str, str]]:
+    """账号 → (密码, 角色)。admin 可访问全部，user 仅可对话与查看健康。"""
+    users: dict[str, tuple[str, str]] = {}
+    if AUTH_ADMIN_PASSWORD:
+        users[AUTH_ADMIN_USERNAME] = (AUTH_ADMIN_PASSWORD, "admin")
+    if AUTH_USER_PASSWORD:
+        users[AUTH_USER_USERNAME] = (AUTH_USER_PASSWORD, "user")
+    for name, password in _parse_extra_users(AUTH_EXTRA_USERS).items():
+        users.setdefault(name, (password, "user"))
+    return users
 
 # ---- 客服策略 ----
 # 0：原文无据时直接拒答并建议转人工（客服默认）

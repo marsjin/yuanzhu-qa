@@ -50,6 +50,9 @@ class SessionStore:
                     ON events(kind, created_at);
                 """
             )
+            conn.execute(
+                "UPDATE events SET kind = 'click_answer' WHERE kind = 'buy_click'"
+            )
 
     def ensure(self, session_id: str) -> None:
         with self._connect() as conn:

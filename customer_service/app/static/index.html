@@ -69,9 +69,6 @@
     display: inline-block; padding: 6px 12px; border-radius: 8px;
     background: var(--accent); color: #fff; text-decoration: none; font-size: 12px;
   }
-  .bookcard .source { margin: 8px 0 0; font-size: 11px; color: var(--muted); }
-  .bookcard .source a { color: var(--accent); text-decoration: none; }
-  .bookcard .source a:hover { text-decoration: underline; }
   .meta a {
     font-size: 11px; line-height: 1.4; padding: 2px 9px;
     border-radius: 999px; background: var(--accent); color: #fff;
@@ -83,8 +80,10 @@
   .ghost {
     border: 1px solid var(--line); background: transparent; color: var(--muted);
     padding: 7px 12px; border-radius: 8px;
+    font: inherit; text-decoration: none; cursor: pointer;
   }
   .ghost:hover { color: var(--ink); border-color: #cfcbc2; }
+  .actions { display: flex; align-items: center; gap: 8px; }
   main {
     flex: 1; overflow-y: auto;
     padding: 22px 18px 8px;
@@ -158,7 +157,10 @@
         <p id="status">连接中…</p>
       </div>
     </div>
-    <button id="reset" class="ghost">清空会话</button>
+    <div class="actions">
+      <button id="reset" class="ghost">清空会话</button>
+      <a class="ghost" href="/logout">退出</a>
+    </div>
   </header>
 
   <main id="chat">
@@ -169,7 +171,6 @@
           <p class="title">《遥远的救世主》</p>
           <p class="sub">豆豆 著</p>
           <a class="btn" id="douban-link" target="_blank" rel="noopener">查看豆瓣详情</a>
-          <p class="source">书目信息与封面来源：<a id="source-link" target="_blank" rel="noopener">豆瓣读书</a></p>
         </div>
       </div>
       <p>你好，我可以依据原著回答人物、情节与常见问题。</p>
@@ -230,16 +231,12 @@ fetch('/health')
       card.hidden = false;
       document.getElementById('logo').innerHTML = `<img src="${d.cover}" alt="封面">`;
       const link = document.getElementById('douban-link');
-      const src = document.getElementById('source-link');
       if (d.douban) {
         link.href = d.douban;
-        src.href = d.douban;
-        const onClick = () => track('buy_click', d.douban);
-        link.addEventListener('click', onClick);
-        src.addEventListener('click', onClick);
+        track('impression_default', d.douban);
+        link.addEventListener('click', () => track('click_default', d.douban));
       } else {
         link.hidden = true;
-        src.closest('.source').hidden = true;
       }
     }
   })
@@ -284,7 +281,8 @@ function renderMeta(meta, d) {
     a.href = l.url;
     a.target = '_blank';
     a.rel = 'noopener';
-    a.addEventListener('click', () => track('buy_click', l.url));
+    track('impression_answer', l.url);
+    a.addEventListener('click', () => track('click_answer', l.url));
     meta.appendChild(a);
   });
   if (d.handoff) meta.appendChild(el('span', 'badge warn', '已建议转人工'));

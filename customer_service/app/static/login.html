@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>登录 · 《遥远的救世主》智能客服</title>
+<style>
+  :root {
+    --bg: #f6f5f2;
+    --card: #ffffff;
+    --ink: #1f2328;
+    --muted: #6b7280;
+    --line: #e5e3de;
+    --accent: #8a5a2b;
+    --warn: #b45309;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh;
+    display: grid; place-items: center; padding: 24px;
+    background: var(--bg); color: var(--ink);
+    font: 15px/1.6 -apple-system, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  }
+  form {
+    width: 100%; max-width: 340px;
+    background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+    padding: 24px 22px;
+  }
+  h1 { font-size: 16px; margin: 0 0 4px; }
+  .sub { margin: 0 0 18px; font-size: 12px; color: var(--muted); }
+  label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 12px; }
+  input {
+    display: block; width: 100%; margin-top: 5px;
+    padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px;
+    background: var(--bg); color: var(--ink); font: inherit; outline: none;
+  }
+  input:focus { border-color: var(--accent); }
+  button {
+    width: 100%; margin-top: 6px; padding: 11px 16px;
+    border: 0; border-radius: 10px; background: var(--accent); color: #fff;
+    font: inherit; font-weight: 600; cursor: pointer;
+  }
+  .err { margin: 0 0 12px; font-size: 13px; color: var(--warn); }
+  .note { margin: 14px 0 0; font-size: 12px; color: var(--muted); text-align: center; }
+</style>
+</head>
+<body>
+<form method="post" action="/login">
+  <h1>《遥远的救世主》智能客服</h1>
+  <p class="sub">请使用分配的账号登录</p>
+  <p class="err" id="err" hidden>用户名或密码错误</p>
+  <label>用户名
+    <input name="username" autocomplete="username" required autofocus />
+  </label>
+  <label>密码
+    <input name="password" type="password" autocomplete="current-password" required />
+  </label>
+  <input type="hidden" name="next" id="next" value="/" />
+  <button type="submit">登录</button>
+  <p class="note">登录后 60 分钟内有效，可随时点击「退出」结束</p>
+</form>
+<script>
+  const params = new URLSearchParams(location.search);
+  document.getElementById('next').value = params.get('next') || '/';
+  if (params.get('error')) document.getElementById('err').hidden = false;
+</script>
+</body>
+</html>
