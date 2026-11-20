@@ -14,6 +14,9 @@ PYTHONPATH=.. python -m pytest tests -q    # 单测
 > 项目根目录的 `.venv`（Python 3.13）已删除：3.13 下没有 `onnxruntime` 轮子，装不了 `fastembed`，
 > 跑起来会静默降级为纯 BM25。向量能力依赖 3.11 环境。
 
+依赖已锁定：`requirements.txt` 固定直接依赖版本，`requirements.lock.txt` 记录 79 个包的完整闭包；
+Docker 构建使用锁文件，保证每次镜像一致。
+
 ## v0.1.0 — 2026-11-19 首次部署成功
 
 服务已部署至服务器并通过公网验收。
