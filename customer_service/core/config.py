@@ -29,7 +29,18 @@ TOP_K = 5                 # 单次检索返回片段数
 PLOT_SPINE_N = 10         # 情节梳理的章节采样数（越大越慢，10 约每 5 章 1 点）
 COVERAGE_THRESHOLD = 0.5  # 覆盖率 ≥ 此值才认为原文能回答
 OUT_OF_CORPUS_THRESHOLD = 0.2  # 覆盖率低于此值直接判为超出语料
+QUERY_REWRITE = os.getenv("CS_QUERY_REWRITE", "0") == "1"  # 向量检索可用时无需改写，默认关闭
+REWRITE_MAX_TOKENS = 64    # 改写输出的 token 上限，只要几个关键词
 MIN_TOKEN_LEN = 2         # 参与检索的最短词长度
+
+# ---- 向量检索（本地小模型推理，不消耗大模型调用）----
+EMBED_ENABLED = os.getenv("CS_EMBED", "1") == "1"
+EMBED_MODEL = os.getenv("CS_EMBED_MODEL", "BAAI/bge-small-zh-v1.5")
+EMBED_CACHE_DIR = Path(os.getenv("CS_EMBED_CACHE", str(Path.home() / ".cache" / "cs_embeddings")))
+VECTORS_PATH = INDEX_DIR / "vectors.npy"
+SEMANTIC_THRESHOLD = 0.55   # 余弦相似度 ≥ 此值视为语义有据
+RRF_K = 60                  # RRF 融合常数，越大越平缓
+VECTOR_TOP_N = 10           # 向量路召回的候选数
 
 # ---- 大模型（默认 DeepSeek，OpenAI 兼容协议）----
 LLM_MODEL = os.getenv("LLM_MODEL", "deepseek-chat")

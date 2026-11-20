@@ -12,10 +12,12 @@ from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_openai import ChatOpenAI
 
 from customer_service.core import config as cfg
+from customer_service.core import obs as log
 from customer_service.retrieval import index as ridx
 from customer_service.retrieval import knowledge as kb
 from customer_service.policy import prompts as P
 from customer_service.generation.llm import stream_collect
+from customer_service.generation.query_rewrite import expand
 
 _CITE_FMT = re.compile(r"《([^》]+)》第([一二三四五六七八九十百零两0-9]+)章")
 _EXCERPT_RE = re.compile(r"原文|摘录|原话|原句|怎么写的")
@@ -128,6 +130,17 @@ def _chapter_answer(question: str, index: ridx.RagIndex, llm: ChatOpenAI,
     return FastResult(text, f"来源：《{cfg.BOOK_NAME}》{chapter}", "document", 1.0, [citation])
 
 
+def _merge_hits(first: list[ridx.Hit], second: list[ridx.Hit]) -> list[ridx.Hit]:
+    """按片段去重合并两轮检索结果，保留覆盖率更高的一条。"""
+    merged: dict[tuple, ridx.Hit] = {}
+    for hit in first + second:
+        meta = hit.doc.metadata
+        key = (meta.get("chapter_seq"), meta.get("chunk_index"))
+        if key not in merged or hit.coverage > merged[key].coverage:
+            merged[key] = hit
+    return sorted(merged.values(), key=lambda h: h.score, reverse=True)
+
+
 def answer(question: str, index: ridx.RagIndex, llm: ChatOpenAI,
            history: list[BaseMessage], intent: str, entities: list[str],
            retrieval_query: str | None = None,
@@ -142,6 +155,22 @@ def answer(question: str, index: ridx.RagIndex, llm: ChatOpenAI,
 
     if intent == "book_qa":
         mode, coverage = ridx.decide_mode(question, hits)
+        if mode == "llm" and cfg.QUERY_REWRITE:
+            extra = expand(question, llm)
+            if extra:
+                more = retrieve(question, f"{retrieval_query or question} {extra}",
+                                intent, entities, index)
+                hits = _merge_hits(hits, more)
+                mode, coverage = ridx.decide_mode(question, hits)
+                if mode == "llm":
+                    known = ridx.known_tokens(index, question)
+                    if known:
+                        expanded = f"{' '.join(known)} {extra}"
+                        expanded_mode, _ = ridx.decide_mode(
+                            expanded, ridx.rescore(index, expanded, hits))
+                        if expanded_mode == "document":
+                            mode = "document"
+                            log.recovery(f"rewrite｜原始覆盖率 {coverage:.2f}，经改写后判定有据")
     else:
         mode, coverage = ("document", 1.0) if hits else ("llm", 0.0)
 

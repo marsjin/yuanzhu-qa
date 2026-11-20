@@ -5,6 +5,7 @@ langgraph
 python-dotenv
 jieba
 rank-bm25
+fastembed
 fastapi
 uvicorn[standard]
 pytest

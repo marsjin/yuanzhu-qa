@@ -16,6 +16,12 @@ WORKDIR /app
 COPY requirements.txt /tmp/requirements.txt
 RUN pip install --no-cache-dir -r /tmp/requirements.txt
 
+# 构建期预下载向量模型，避免容器运行时联网
+ARG HF_ENDPOINT=https://hf-mirror.com
+ENV HF_ENDPOINT=${HF_ENDPOINT} \
+    CS_EMBED_CACHE=/opt/models
+RUN python -c "from fastembed import TextEmbedding; TextEmbedding(model_name='BAAI/bge-small-zh-v1.5', cache_dir='/opt/models')"
+
 COPY __init__.py run_service.py /app/customer_service/
 COPY core /app/customer_service/core
 COPY retrieval /app/customer_service/retrieval
