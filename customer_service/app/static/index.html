@@ -84,6 +84,13 @@
   }
   .ghost:hover { color: var(--ink); border-color: #cfcbc2; }
   .actions { display: flex; align-items: center; gap: 8px; }
+  .who { font-size: 12px; color: var(--muted); white-space: nowrap; }
+  .toolbar {
+    display: flex; justify-content: flex-end;
+    padding: 8px 18px 0;
+  }
+  .toolbar[hidden] { display: none; }
+  .toolbar .ghost { font-size: 12px; padding: 4px 10px; }
   main {
     flex: 1; overflow-y: auto;
     padding: 22px 18px 8px;
@@ -158,10 +165,14 @@
       </div>
     </div>
     <div class="actions">
-      <button id="reset" class="ghost">清空会话</button>
+      <span class="who" id="who" hidden></span>
       <a class="ghost" href="/logout">退出</a>
     </div>
   </header>
+
+  <div class="toolbar" id="toolbar" hidden>
+    <button id="reset" class="ghost">清空会话</button>
+  </div>
 
   <main id="chat">
     <div class="welcome" id="welcome">
@@ -242,6 +253,16 @@ fetch('/health')
   })
   .catch(() => { statusEl.textContent = '服务未连接'; });
 
+fetch('/me')
+  .then(r => r.json())
+  .then(d => {
+    if (!d.username) return;
+    const who = document.getElementById('who');
+    who.textContent = `${d.username}（${d.role === 'admin' ? '管理员' : '普通用户'}）`;
+    who.hidden = false;
+  })
+  .catch(() => {});
+
 function el(tag, cls, text) {
   const node = document.createElement(tag);
   if (cls) node.className = cls;
@@ -295,6 +316,7 @@ async function send(text) {
   sendBtn.disabled = true;
   const welcome = document.getElementById('welcome');
   if (welcome) welcome.remove();
+  document.getElementById('toolbar').hidden = false;
 
   addUser(question);
   const { content, meta } = addAssistant();

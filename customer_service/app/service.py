@@ -95,8 +95,9 @@ async def require_auth(request: Request, call_next):
             target = "/login" + (f"?next={quote(path, safe='/')}" if path != "/" else "")
             return RedirectResponse(target, status_code=303)
     else:
-        identity = _auth_identity(request.headers.get("Authorization")) or auth.verify(
-            request.cookies.get(cfg.AUTH_COOKIE_NAME)
+        # 登录 Cookie 优先：避免浏览器缓存的 Basic 凭证覆盖当前登录身份
+        identity = auth.verify(request.cookies.get(cfg.AUTH_COOKIE_NAME)) or _auth_identity(
+            request.headers.get("Authorization")
         )
         if identity is None:
             return JSONResponse(
@@ -107,7 +108,18 @@ async def require_auth(request: Request, call_next):
 
     if identity[1] != "admin" and path.startswith(ADMIN_ONLY_PREFIXES):
         return JSONResponse(status_code=403, content={"detail": "需要管理员权限"})
+    request.state.auth = identity
     return await call_next(request)
+
+
+@app.get("/me")
+def current_user(request: Request) -> dict:
+    """当前登录用户，供页面展示；未启用鉴权时返回 open。"""
+    identity = getattr(request.state, "auth", None)
+    if not identity:
+        return {"username": "", "role": "open"}
+    username, role = identity
+    return {"username": username, "role": role}
 
 
 class ChatRequest(BaseModel):

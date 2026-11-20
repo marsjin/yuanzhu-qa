@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import base64
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -91,6 +93,29 @@ def test_external_next_is_ignored():
     client = TestClient(service.app)
     resp = _login(client, "user", "change-me-user", next_path="//evil.example.com")
     assert resp.headers["location"] == "/"
+
+
+def test_me_returns_current_user():
+    client = TestClient(service.app)
+    _login(client, "user", "change-me-user")
+    resp = client.get("/me")
+    assert resp.status_code == 200
+    assert resp.json() == {"username": "user", "role": "user"}
+
+
+def test_me_requires_login():
+    client = TestClient(service.app)
+    assert client.get("/me").status_code == 401
+
+
+def test_cookie_identity_wins_over_cached_basic():
+    """浏览器可能缓存了 admin 的 Basic 凭证，登录 Cookie 必须优先。"""
+    client = TestClient(service.app)
+    _login(client, "user", "change-me-user")
+    raw = base64.b64encode(b"admin:s3cret").decode("ascii")
+    resp = client.get("/me", headers={"Authorization": f"Basic {raw}"})
+    assert resp.status_code == 200
+    assert resp.json() == {"username": "user", "role": "user"}
 
 
 def test_token_expires(monkeypatch):

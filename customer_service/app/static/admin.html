@@ -53,6 +53,7 @@
   }
   .tabs button.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
   .note { font-size: 12px; color: var(--muted); margin-top: 10px; }
+  .who { font-size: 12px; color: var(--muted); white-space: nowrap; }
   .err { color: var(--warn); font-size: 13px; }
   footer { font-size: 12px; color: var(--muted); text-align: center; }
 </style>
@@ -61,6 +62,7 @@
 <div class="wrap">
   <header>
     <h1>管理后台</h1>
+    <span class="who" id="who"></span>
     <span>
       <a href="/logout">退出登录</a>
       &nbsp;·&nbsp;
@@ -172,6 +174,16 @@ tabsEl.addEventListener('click', (ev) => {
 
 loadHealth();
 loadStats();
+
+fetch('/me')
+  .then(r => r.json())
+  .then(d => {
+    if (d.username) {
+      document.getElementById('who').textContent =
+        `当前用户：${d.username}（${d.role === 'admin' ? '管理员' : '普通用户'}）`;
+    }
+  })
+  .catch(() => {});
 </script>
 </body>
 </html>
