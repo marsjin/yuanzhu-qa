@@ -12,6 +12,7 @@ from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 
 from customer_service.retrieval import index as ridx
 from customer_service.retrieval import knowledge as kb
+from customer_service.core import config as cfg
 from customer_service.core import obs as log
 from customer_service.policy import prompts as P
 from customer_service.agent.graph import run_agent
@@ -32,6 +33,7 @@ class AnswerResult:
     intent: str
     handoff: bool = False
     citations: list[str] = field(default_factory=list)
+    links: list[dict] = field(default_factory=list)
     latency_ms: int = 0
     trace_id: str = ""
     session_id: str = ""
@@ -82,8 +84,11 @@ class ChatPipeline:
         if intent == "faq":
             entry = kb.match_faq(message) or {}
             text = entry.get("answer", P.REFUSAL_TEXT)
+            links = []
+            if entry.get("id") == "buy" and cfg.BOOK_DOUBAN_URL:
+                links = [{"label": cfg.BUY_LINK_LABEL, "url": cfg.douban_url()}]
             result = AnswerResult(text, "来源：客服知识库", "faq", intent,
-                                  trace_id=trace_id, session_id=session_id)
+                                  links=links, trace_id=trace_id, session_id=session_id)
             self._persist(session_id, message, result.text, entities)
             return self._finish(result, t0)
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from dotenv import load_dotenv
 
@@ -54,6 +55,27 @@ PLOT_MAX_TOKENS = 800    #1200 情节梳理的输出上限，防止长文拖慢�
 CHAPTER_SUMMARY_CHUNKS = 6   # 章节摘要送入的片段数（章内均匀采样）
 CHAPTER_EXCERPT_CHUNKS = 2   # 原文摘录返回的片段数
 CHAPTER_MAX_TOKENS = 600     # 章节摘要输出上限（留足余量，避免长句被截断）
+
+# ---- 书目信息（页面展示与购买引导）----
+BOOK_DOUBAN_URL = os.getenv("CS_DOUBAN_URL", "https://book.douban.com/subject/1322455/")
+BOOK_COVER_PATH = "/static/cover.jpg"
+BOOK_COVER_FILE = BASE_DIR / "app" / "static" / "cover.jpg"
+BOOK_SOURCE_NAME = "豆瓣读书"
+BUY_LINK_LABEL = f"来源：{BOOK_SOURCE_NAME}"
+BOOK_REFERRAL_TAG = os.getenv("CS_REFERRAL_TAG", "cs.brandex.top")
+
+
+def douban_url() -> str:
+    """在外链上追加来源标识：Douban 的 from 参数 + UTM，便于对方区分来路。"""
+    parts = urlsplit(BOOK_DOUBAN_URL)
+    query = dict(parse_qsl(parts.query))
+    query.update({
+        "from": BOOK_REFERRAL_TAG,
+        "utm_source": BOOK_REFERRAL_TAG,
+        "utm_medium": "referral",
+        "utm_campaign": "book_purchase",
+    })
+    return urlunsplit(parts._replace(query=urlencode(query)))
 
 # ---- HTTP 鉴权 ----
 AUTH_USERNAME = os.getenv("CS_AUTH_USERNAME", "admin")

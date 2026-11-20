@@ -82,6 +82,7 @@ class ChatResponse(BaseModel):
     intent: str
     handoff: bool
     citations: list[str]
+    links: list[dict] = Field(default_factory=list)
     latency_ms: int
     trace_id: str
     session_id: str
@@ -92,6 +93,12 @@ class ResetResponse(BaseModel):
     session_id: str
 
 
+class EventRequest(BaseModel):
+    type: str = Field(min_length=1, max_length=32, description="事件类型，如 buy_click")
+    url: str = Field(default="", max_length=512, description="点击的外链")
+    session_id: str = Field(default="", max_length=64, description="会话 ID")
+
+
 def _pipeline() -> ChatPipeline:
     return _state["pipeline"]
 
@@ -99,7 +106,7 @@ def _pipeline() -> ChatPipeline:
 def _to_response(r: AnswerResult) -> ChatResponse:
     return ChatResponse(
         text=r.text, label=r.label, route=r.route, intent=r.intent, handoff=r.handoff,
-        citations=r.citations, latency_ms=r.latency_ms, trace_id=r.trace_id,
+        citations=r.citations, links=r.links, latency_ms=r.latency_ms, trace_id=r.trace_id,
         session_id=r.session_id,
     )
 
@@ -139,7 +146,7 @@ def _sse(pipeline: ChatPipeline, req: ChatRequest) -> Iterator[str]:
     yield _event({
         "type": "done", "text": result.text, "label": result.label,
         "route": result.route, "intent": result.intent, "handoff": result.handoff,
-        "citations": result.citations, "latency_ms": result.latency_ms,
+        "citations": result.citations, "links": result.links, "latency_ms": result.latency_ms,
         "trace_id": result.trace_id, "session_id": result.session_id,
     })
 
@@ -152,6 +159,17 @@ def chat(req: ChatRequest):
     return _to_response(pipeline.answer(req.session_id, req.message))
 
 
+@app.post("/event")
+def log_event(req: EventRequest) -> dict:
+    _pipeline().store.log_event(req.type, req.session_id, req.url)
+    return {"ok": True}
+
+
+@app.get("/events/stats")
+def event_stats(days: int = 7) -> dict:
+    return {"days": days, "counts": _pipeline().store.event_stats(days)}
+
+
 @app.get("/health")
 def health() -> dict:
     return {
@@ -159,6 +177,8 @@ def health() -> dict:
         "book": cfg.BOOK_NAME,
         "index": _state.get("stats", {}),
         "llm_configured": bool(cfg.LLM_API_KEY),
+        "cover": cfg.BOOK_COVER_PATH if cfg.BOOK_COVER_FILE.exists() else None,
+        "douban": cfg.douban_url(),
     }
 
 

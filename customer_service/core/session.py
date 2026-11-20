@@ -39,6 +39,15 @@ class SessionStore:
                     last_entities TEXT NOT NULL DEFAULT '[]',
                     updated_at REAL NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS events (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    kind TEXT NOT NULL,
+                    session_id TEXT NOT NULL DEFAULT '',
+                    detail TEXT NOT NULL DEFAULT '',
+                    created_at REAL NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_events_kind_time
+                    ON events(kind, created_at);
                 """
             )
 
@@ -88,3 +97,19 @@ class SessionStore:
         with self._connect() as conn:
             conn.execute("DELETE FROM messages WHERE session_id = ?", (session_id,))
             conn.execute("DELETE FROM session_state WHERE session_id = ?", (session_id,))
+
+    def log_event(self, kind: str, session_id: str = "", detail: str = "") -> None:
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT INTO events(kind, session_id, detail, created_at) VALUES (?, ?, ?, ?)",
+                (kind, session_id, detail, time.time()),
+            )
+
+    def event_stats(self, days: int = 7) -> dict[str, int]:
+        since = time.time() - days * 86400
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT kind, COUNT(*) AS n FROM events WHERE created_at >= ? GROUP BY kind",
+                (since,),
+            ).fetchall()
+        return {r["kind"]: r["n"] for r in rows}
