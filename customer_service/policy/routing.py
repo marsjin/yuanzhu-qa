@@ -1,4 +1,4 @@
-"""意图路由：handoff / faq / plot / compare / book_qa，以及是否升级 Agent。"""
+"""意图路由：handoff / faq / chapter / book_intro / plot / compare / book_qa，以及是否升级 Agent。"""
 
 from __future__ import annotations
 
@@ -6,12 +6,22 @@ import re
 from typing import Literal
 
 from customer_service.retrieval import knowledge as kb
+from customer_service.retrieval.corpus import CHAPTER_QUERY_RE
 
-Intent = Literal["handoff", "faq", "plot", "compare", "book_qa"]
+Intent = Literal[
+    "handoff", "faq", "chapter", "book_intro", "plot", "compare", "book_qa"
+]
 
 HANDOFF_RE = re.compile(r"转人工|人工客服|真人客服|投诉|退款|退货|订单|物流|发票|客服电话")
 PLOT_RE = re.compile(r"情节|主线|脉络|梗概|故事发展|讲了什么|来龙去脉|故事线")
 COMPARE_RE = re.compile(r"对比|比较|区别|差异|异同|相比|vs|VS")
+
+# 书目导览：本书简介 / 介绍一下这本书
+INTRO_RE = re.compile(
+    r"(本书|这本书|全书)(的)?(简介|介绍|概览|主要内容|内容简介)"
+    r"|(简介|介绍)(一下)?(本书|这本书|全书)"
+    r"|内容简介|书籍简介"
+)
 
 # 需要多步推理的问题：交给 Agent
 AGENT_TRIGGERS = re.compile(
@@ -26,11 +36,16 @@ PRONOUN_RE = re.compile(r"^(她|他|它|这个人|那个人|那本书|这本书|
 
 
 def detect_intent(question: str, entities: list[str]) -> Intent:
-    """规则意图识别，顺序：转人工 → FAQ → 情节 → 对比 → 默认。"""
+    """规则意图识别，顺序：转人工 → FAQ → 单章 → 书目导览 → 对比 → 情节 → 默认。"""
     if HANDOFF_RE.search(question):
         return "handoff"
     if kb.match_faq(question) is not None:
         return "faq"
+    # 只识别「单章」；「从第X章到第Y章」属跨章范围，交给 Agent 路径
+    if len(CHAPTER_QUERY_RE.findall(question)) == 1:
+        return "chapter"
+    if INTRO_RE.search(question):
+        return "book_intro"
     if COMPARE_RE.search(question) and len(entities) >= 2:
         return "compare"
     if PLOT_RE.search(question):

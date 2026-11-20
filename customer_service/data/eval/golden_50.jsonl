@@ -48,3 +48,5 @@
 {"id":"ho-02","type":"handoff","question":"转人工客服","keywords":[],"expected_route":"handoff","no_answer":true}
 {"id":"ho-03","type":"handoff","question":"我的订单物流到哪了？","keywords":[],"expected_route":"handoff","no_answer":true}
 {"id":"ho-04","type":"handoff","question":"我要投诉你们","keywords":[],"expected_route":"handoff","no_answer":true}
+{"id":"struct-01","type":"struct","question":"第一章内容","keywords":["肖亚文"],"expected_route":"fast","no_answer":false}
+{"id":"struct-02","type":"struct","question":"本书简介","keywords":["豆豆"],"expected_route":"fast","no_answer":false}

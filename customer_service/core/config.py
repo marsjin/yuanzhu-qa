@@ -39,6 +39,11 @@ LLM_TEMPERATURE = 0.2
 LLM_TIMEOUT = 60
 PLOT_MAX_TOKENS = 800    #1200 情节梳理的输出上限，防止长文拖慢响应
 
+# ---- 结构导航（第X章 / 本书简介）----
+CHAPTER_SUMMARY_CHUNKS = 6   # 章节摘要送入的片段数（章内均匀采样）
+CHAPTER_EXCERPT_CHUNKS = 2   # 原文摘录返回的片段数
+CHAPTER_MAX_TOKENS = 600     # 章节摘要输出上限（留足余量，避免长句被截断）
+
 # ---- HTTP 鉴权 ----
 AUTH_USERNAME = os.getenv("CS_AUTH_USERNAME", "admin")
 AUTH_PASSWORD = os.getenv("CS_AUTH_PASSWORD", "change-me-admin")

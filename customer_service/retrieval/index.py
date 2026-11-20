@@ -10,7 +10,12 @@ from langchain_core.documents import Document
 from rank_bm25 import BM25Okapi
 
 from customer_service.core import config as cfg
-from customer_service.retrieval.corpus import split_corpus, tokenize
+from customer_service.retrieval.corpus import (
+    CHAPTER_QUERY_RE,
+    cn_to_int,
+    split_corpus,
+    tokenize,
+)
 
 
 @dataclass
@@ -96,6 +101,39 @@ def search(query: str, index: RagIndex, k: int = cfg.TOP_K,
 def sort_hits_by_plot(hits: list[Hit]) -> list[Hit]:
     return sorted(hits, key=lambda h: (h.doc.metadata.get("chapter_seq", 0),
                                        h.doc.metadata.get("chunk_index", 0)))
+
+
+def chapter_titles(index: RagIndex) -> list[tuple[int, str]]:
+    """[(chapter_seq, 章节标题), ...]，按 seq 升序。"""
+    titles: dict[int, str] = {}
+    for doc in index.docs:
+        seq = doc.metadata.get("chapter_seq", 0)
+        titles.setdefault(seq, doc.metadata.get("chapter", f"第{seq + 1}章"))
+    return sorted(titles.items())
+
+
+def chapter_seq_of(index: RagIndex, question: str) -> int | None:
+    """把问题里的「第X章」解析为 chapter_seq；无法定位返回 None。
+
+    不假设 seq == 章号 - 1：语料开头的「前言」会让两者错位，因此按标题匹配。
+    """
+    numbers = [cn_to_int(raw) for raw in CHAPTER_QUERY_RE.findall(question)]
+    targets = [n for n in numbers if n is not None]
+    if not targets:
+        return None
+    target = targets[0]
+    for seq, title in chapter_titles(index):
+        match = CHAPTER_QUERY_RE.search(title)
+        if match and cn_to_int(match.group(1)) == target:
+            return seq
+    return None
+
+
+def chapter_chunks(index: RagIndex, seq: int, limit: int | None = None) -> list[Document]:
+    """某章的全部片段，按 chunk_index 升序；limit 取前 N 段。"""
+    docs = [d for d in index.docs if d.metadata.get("chapter_seq") == seq]
+    docs.sort(key=lambda d: d.metadata.get("chunk_index", 0))
+    return docs[:limit] if limit else docs
 
 
 def sample_plot_spine(index: RagIndex, n: int = cfg.PLOT_SPINE_N) -> list[Hit]:

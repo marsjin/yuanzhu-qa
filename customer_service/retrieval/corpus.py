@@ -19,7 +19,33 @@ for _w in ALL_NAMES:  # 人名整词化，避免「芮小丹」被切成「芮/�
     jieba.add_word(_w)
 
 CHAPTER_RE = re.compile(r"^第[一二三四五六七八九十百零两0-9]+章")
+# 不锚定行首：用于从用户问题里取出「第X章」
+CHAPTER_QUERY_RE = re.compile(r"第([一二三四五六七八九十百零两0-9]+)章")
 SECTION_TITLES = {"卷首语", "后记", "尾声", "内容简介", "作者简介"}
+
+_CN_DIGITS = {"零": 0, "〇": 0, "一": 1, "二": 2, "两": 2, "三": 3,
+              "四": 4, "五": 5, "六": 6, "七": 7, "八": 8, "九": 9}
+_CN_UNITS = {"十": 10, "百": 100, "千": 1000}
+
+
+def cn_to_int(text: str) -> int | None:
+    """中文数字或阿拉伯数字转整数，无法解析返回 None。"""
+    s = text.strip()
+    if not s:
+        return None
+    if s.isdigit():
+        return int(s)
+    total = 0
+    num = 0
+    for ch in s:
+        if ch in _CN_DIGITS:
+            num = _CN_DIGITS[ch]
+        elif ch in _CN_UNITS:
+            total += (num or 1) * _CN_UNITS[ch]
+            num = 0
+        else:
+            return None
+    return total + num
 
 STOPWORDS = set(
     """
