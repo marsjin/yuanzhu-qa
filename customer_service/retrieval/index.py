@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import pickle
 from dataclasses import dataclass
 
@@ -71,15 +72,26 @@ def load_index() -> RagIndex:
     return RagIndex.create(docs, payload["tokens"])
 
 
+def query_weights(index: RagIndex, tokens: list[str]) -> dict[str, float]:
+    """查询词权重：语料内用 BM25 的 idf，未登录词取上限值。
+
+    未登录词意味着全书都没有这个词，属于最难命中的信号，按上限计权，
+    避免「内容/本书」这类泛词独力把覆盖率抬过阈值。
+    """
+    ceiling = math.log(len(index.docs) + 1)
+    return {t: max(index.bm25.idf.get(t, ceiling), 1e-6) for t in set(tokens)}
+
+
 def search(query: str, index: RagIndex, k: int = cfg.TOP_K,
            coverage_query: str | None = None,
            chapter_range: tuple[int, int] | None = None) -> list[Hit]:
-    """BM25 召回 Top-K 并计算关键词覆盖率。"""
+    """BM25 召回 Top-K，并按 IDF 加权计算关键词覆盖率。"""
     q_tokens = tokenize(query)
     if not q_tokens:
         return []
-    cov_set = set(tokenize(coverage_query or query))
-    if not cov_set:
+    weights = query_weights(index, tokenize(coverage_query or query))
+    total = sum(weights.values())
+    if not total:
         return []
 
     scores = index.bm25.get_scores(q_tokens)
@@ -93,8 +105,8 @@ def search(query: str, index: RagIndex, k: int = cfg.TOP_K,
             seq = index.docs[i].metadata.get("chapter_seq", 0)
             if not (chapter_range[0] <= seq <= chapter_range[1]):
                 continue
-        coverage = len(cov_set & index.token_sets[i]) / len(cov_set)
-        hits.append(Hit(index.docs[i], float(scores[i]), coverage))
+        matched = sum(w for t, w in weights.items() if t in index.token_sets[i])
+        hits.append(Hit(index.docs[i], float(scores[i]), matched / total))
     return hits
 
 
@@ -152,7 +164,7 @@ def sample_plot_spine(index: RagIndex, n: int = cfg.PLOT_SPINE_N) -> list[Hit]:
 
 
 def decide_mode(query: str, hits: list[Hit]) -> tuple[str, float]:
-    """覆盖率 ≥ 阈值 → document；否则 llm。"""
+    """IDF 加权覆盖率 ≥ 阈值 → document；否则 llm。"""
     q_tokens = tokenize(query)
     if not q_tokens or not hits:
         return "llm", 0.0
