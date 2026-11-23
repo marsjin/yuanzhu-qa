@@ -2,5 +2,9 @@ __pycache__/
 *.pyc
 .env
 .env.*
+!.env.example
 .index/
 .sessions.db
+*.log
+.DS_Store
+data/corpus/*.txt

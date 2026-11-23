@@ -8,6 +8,10 @@ from customer_service.app.pipeline import ChatPipeline
 from customer_service.core import config as cfg
 from customer_service.core.session import SessionStore
 
+# 公开 CI 不配置真实密钥：依赖大模型的用例在无 Key 时跳过
+LLM_AVAILABLE = bool(cfg.LLM_API_KEY)
+requires_llm = pytest.mark.skipif(not LLM_AVAILABLE, reason="DEEPSEEK_API_KEY 未配置，跳过依赖大模型的用例")
+
 
 @pytest.fixture
 def pipeline(tiny_index, tmp_path) -> ChatPipeline:
@@ -32,6 +36,7 @@ def test_other_faq_has_no_link(pipeline):
     assert r.links == []
 
 
+@requires_llm
 def test_book_question_has_no_link(pipeline):
     r = pipeline.answer("s1", "丁元英是谁")
     assert r.links == []
