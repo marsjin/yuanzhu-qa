@@ -88,6 +88,22 @@ AUTH_ENABLED = bool(AUTH_ADMIN_PASSWORD)  # 配置管理员密码后，页面与
 AUTH_SESSION_MINUTES = int(os.getenv("CS_AUTH_SESSION_MINUTES", "60"))  # 登录有效期
 AUTH_COOKIE_NAME = "cs_web_session"
 
+# ---- 访问来源与访问日志 ----
+VISIT_ENABLED = os.getenv("CS_VISIT_ENABLED", "1") == "1"
+VISIT_RETENTION_DAYS = int(os.getenv("CS_VISIT_RETENTION_DAYS", "90"))
+VISIT_ATTRIBUTION_DAYS = int(os.getenv("CS_VISIT_ATTRIBUTION_DAYS", "30"))
+VISITOR_COOKIE_NAME = "cs_visitor"
+VISITOR_COOKIE_DAYS = int(os.getenv("CS_VISITOR_COOKIE_DAYS", "30"))
+# 访客 IP/UA 哈希密钥；未配置时由管理员口令派生，保证同实例内稳定
+VISIT_HASH_KEY = os.getenv("CS_VISIT_HASH_KEY") or (AUTH_ADMIN_PASSWORD or "cs-visit")
+VISIT_TZ_OFFSET = int(os.getenv("CS_VISIT_TZ_OFFSET", "8"))  # 统计日切时区（小时）
+VISIT_SOURCE_MAX_LEN = 40
+# UA 小写命中任一关键字即标记为爬虫（仍落库，只做占比统计）
+VISIT_BOT_UA = (
+    "bot", "spider", "crawler", "slurp", "preview", "monitor",
+    "uptime", "curl", "wget", "python-requests", "headless",
+)
+
 
 def _parse_extra_users(raw: str) -> dict[str, str]:
     """把 name:password,name:password 解析成字典；忽略格式不完整的条目。"""
