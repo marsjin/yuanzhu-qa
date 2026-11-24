@@ -1,0 +1,47 @@
+# 根级忽略规则：覆盖仓库顶层与通用产物；
+# customer_service/.gitignore 仍在其目录内生效，二者叠加。
+
+# ---- Python 缓存与构建产物 ----
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+
+# ---- 测试与静态检查缓存 ----
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# ---- 虚拟环境 ----
+.venv/
+venv/
+
+# ---- 环境变量（示例文件必须保留）----
+.env
+.env.*
+!.env.example
+
+# ---- 运行时数据：索引、SQLite、日志 ----
+.index/
+.sessions.db
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.log
+
+# ---- 系统与编辑器临时文件 ----
+.DS_Store
+._*
+*.swp
+*.swo
+*~
+.idea
+
+contest-materials
+STATUS-ASSESSMENT.md
+.screenshots
