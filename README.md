@@ -39,9 +39,9 @@
 | 这本书的主线讲了什么？ | plot | 全章等间隔抽样拼故事脊柱 |
 | 丁元英的孩子后来考上大学了吗？ | 拒答 | 覆盖率 0.45 < 阈值 → 拒答转人工，不编造 |
 
-<img src="customer_service/docs/images/chat-example.png" alt="对话效果样例" width="420" />
+<img src="customer_service/docs/images/homepage-example.png" alt="首页与建议问题" width="420" />
 
-一次多轮对话的实际效果：回答带原文出处与来源徽标，价格类问题走 FAQ 快路径，超出语料的问题明确拒答。
+首页空态：书籍卡片、常见问题入口与输入框；问答类型与拒答策略见上表。
 
 ## 技术架构
 
