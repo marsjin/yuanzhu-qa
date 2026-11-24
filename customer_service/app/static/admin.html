@@ -52,6 +52,13 @@
     padding: 4px 12px; border-radius: 999px; font-size: 12px; cursor: pointer;
   }
   .tabs button.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+  .tabs button:disabled { opacity: .45; cursor: default; }
+  select {
+    border: 1px solid var(--line); background: var(--card); color: var(--ink);
+    padding: 4px 10px; border-radius: 999px; font-size: 12px;
+  }
+  .check { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+  .scroll { overflow-x: auto; }
   .note { font-size: 12px; color: var(--muted); margin-top: 10px; }
   .who { font-size: 12px; color: var(--muted); white-space: nowrap; }
   .err { color: var(--warn); font-size: 13px; }
@@ -79,6 +86,41 @@
     </div>
     <div id="stats"></div>
     <p class="note">展示次数按入口拆分：默认 = 首页封面卡；查询 = 回答中的来源徽标。</p>
+  </section>
+
+  <section class="card">
+    <h2>访问来源 <span class="raw"><a id="visits-stats-raw" href="/visits/stats?days=7" target="_blank" rel="noopener">打开原始 JSON</a></span></h2>
+    <div class="tabs" id="visit-tabs">
+      <button data-days="1">近 1 天</button>
+      <button data-days="7" class="on">近 7 天</button>
+      <button data-days="30">近 30 天</button>
+    </div>
+    <div id="visit-summary" class="grid"></div>
+    <div id="visit-sources" class="scroll" style="margin-top:12px"></div>
+    <div id="visit-days" class="scroll" style="margin-top:12px"></div>
+    <p class="note">PV = 首页访问次数；UV = 去重访客数（优先首方 Cookie，缺失时按 IP+UA 哈希兜底）；进入对话率 = 该来源访客中真正发过消息的比例。</p>
+  </section>
+
+  <section class="card">
+    <h2>访问明细 <span class="raw"><a id="visits-list-raw" href="/visits?days=7" target="_blank" rel="noopener">打开原始 JSON</a></span></h2>
+    <div class="tabs">
+      <select id="visit-source">
+        <option value="">全部来源</option>
+      </select>
+      <label class="check"><input type="checkbox" id="visit-bots" /> 含爬虫</label>
+    </div>
+    <div id="visit-list" class="scroll"></div>
+    <div class="tabs" style="margin-top:10px">
+      <button id="visit-prev">上一页</button>
+      <span class="note" id="visit-page" style="margin:0;align-self:center"></span>
+      <button id="visit-next">下一页</button>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>GitHub 来源提问 <span class="raw"><a id="visit-questions-raw" href="/visits/questions?days=30&source=github" target="_blank" rel="noopener">打开原始 JSON</a></span></h2>
+    <div id="visit-questions" class="scroll"></div>
+    <p class="note">按首次归因窗口关联：只展示归因到 github* 来源、且在窗口内发过消息的访客提问。</p>
   </section>
 
   <section class="card">
@@ -172,8 +214,156 @@ tabsEl.addEventListener('click', (ev) => {
   loadStats();
 });
 
+// ---- 访问来源 ----
+const visitSummaryEl = document.getElementById('visit-summary');
+const visitSourcesEl = document.getElementById('visit-sources');
+const visitDaysEl = document.getElementById('visit-days');
+const visitListEl = document.getElementById('visit-list');
+const visitQuestionsEl = document.getElementById('visit-questions');
+const visitTabsEl = document.getElementById('visit-tabs');
+const visitSourceEl = document.getElementById('visit-source');
+const visitBotsEl = document.getElementById('visit-bots');
+const visitPageEl = document.getElementById('visit-page');
+const visitPrevEl = document.getElementById('visit-prev');
+const visitNextEl = document.getElementById('visit-next');
+
+let visitDays = 7;
+let visitPage = 1;
+let visitTotal = 0;
+const VISIT_PAGE_SIZE = 20;
+
+function pct(value) {
+  return (Number(value || 0) * 100).toFixed(1) + '%';
+}
+
+function fmtTime(ts) {
+  return new Date(ts * 1000).toLocaleString('zh-CN', { hour12: false });
+}
+
+function grid(headers, items, mapper) {
+  const table = el('table');
+  const head = el('tr');
+  headers.forEach((text, i) => head.appendChild(el('th', i ? 'num' : '', text)));
+  const thead = el('thead');
+  thead.appendChild(head);
+  const body = el('tbody');
+  items.forEach(it => {
+    const tr = el('tr');
+    mapper(it).forEach((value, i) => tr.appendChild(el('td', i ? 'num' : '', value)));
+    body.appendChild(tr);
+  });
+  table.append(thead, body);
+  return table;
+}
+
+function syncSourceOptions(sources) {
+  const current = visitSourceEl.value;
+  visitSourceEl.replaceChildren(new Option('全部来源', ''));
+  sources.forEach(r => visitSourceEl.appendChild(new Option(r.source, r.source)));
+  if ([...visitSourceEl.options].some(o => o.value === current)) {
+    visitSourceEl.value = current;
+  }
+}
+
+async function loadVisitStats() {
+  try {
+    const query = `days=${visitDays}&include_bots=${visitBotsEl.checked ? 1 : 0}`;
+    const d = await (await fetch('/visits/stats?' + query)).json();
+    visitSummaryEl.replaceChildren(
+      item('PV', d.pv),
+      item('UV', d.uv),
+      item('爬虫 PV', d.bot_pv),
+      item('爬虫占比', pct(d.bot_ratio))
+    );
+    const sources = d.by_source || [];
+    syncSourceOptions(sources);
+    visitSourcesEl.replaceChildren(sources.length
+      ? grid(['来源', 'PV', 'UV', '进入对话率', '爬虫占比'], sources,
+          r => [r.source, r.pv, r.uv, pct(r.chat_rate), pct(r.bot_ratio)])
+      : el('div', 'note', '暂无访问'));
+    const byDay = d.by_day || [];
+    visitDaysEl.replaceChildren(byDay.length
+      ? grid(['日期', 'PV', 'UV'], byDay, r => [r.day, r.pv, r.uv])
+      : el('div', 'note', '暂无按天数据'));
+    document.getElementById('visits-stats-raw').href = '/visits/stats?' + query;
+  } catch (e) {
+    visitSourcesEl.replaceChildren(el('div', 'err', '读取失败：' + e.message));
+  }
+}
+
+async function loadVisitList() {
+  const params = new URLSearchParams({
+    days: visitDays,
+    source: visitSourceEl.value,
+    include_bots: visitBotsEl.checked ? 1 : 0,
+    page: visitPage,
+    page_size: VISIT_PAGE_SIZE,
+  });
+  try {
+    const d = await (await fetch('/visits?' + params)).json();
+    visitTotal = d.total;
+    const items = d.items || [];
+    visitListEl.replaceChildren(items.length
+      ? grid(['时间', '来源', '会话', '用户', '爬虫', '状态'], items,
+          r => [fmtTime(r.visited_at), r.source, r.session_id || '—',
+                r.username || '—', r.is_bot ? '是' : '否', r.status])
+      : el('div', 'note', '暂无明细'));
+    visitPageEl.textContent = `第 ${d.page} 页 / 共 ${d.total} 条`;
+    visitPrevEl.disabled = d.page <= 1;
+    visitNextEl.disabled = d.page * d.page_size >= d.total;
+    document.getElementById('visits-list-raw').href = '/visits?' + params;
+  } catch (e) {
+    visitListEl.replaceChildren(el('div', 'err', '读取失败：' + e.message));
+  }
+}
+
+async function loadVisitQuestions() {
+  const source = visitSourceEl.value || 'github';
+  const params = new URLSearchParams({ days: visitDays, source: source, limit: 50 });
+  try {
+    const d = await (await fetch('/visits/questions?' + params)).json();
+    const items = d.items || [];
+    visitQuestionsEl.replaceChildren(items.length
+      ? grid(['时间', '来源', '用户', '问题'], items,
+          r => [fmtTime(r.created_at), r.source, r.username || '—',
+                (r.question || '').length > 60 ? r.question.slice(0, 60) + '…' : r.question])
+      : el('div', 'note', '暂无提问'));
+    document.getElementById('visit-questions-raw').href = '/visits/questions?' + params;
+  } catch (e) {
+    visitQuestionsEl.replaceChildren(el('div', 'err', '读取失败：' + e.message));
+  }
+}
+
+visitTabsEl.addEventListener('click', (ev) => {
+  const btn = ev.target.closest('button');
+  if (!btn) return;
+  visitDays = Number(btn.dataset.days);
+  [...visitTabsEl.children].forEach(b => b.classList.toggle('on', b === btn));
+  visitPage = 1;
+  loadVisitStats().then(loadVisitList);
+  loadVisitQuestions();
+});
+
+visitSourceEl.addEventListener('change', () => {
+  visitPage = 1;
+  loadVisitList();
+  loadVisitQuestions();
+});
+visitBotsEl.addEventListener('change', () => {
+  visitPage = 1;
+  loadVisitStats().then(loadVisitList);
+});
+visitPrevEl.addEventListener('click', () => {
+  if (visitPage > 1) { visitPage -= 1; loadVisitList(); }
+});
+visitNextEl.addEventListener('click', () => {
+  if (visitPage * VISIT_PAGE_SIZE < visitTotal) { visitPage += 1; loadVisitList(); }
+});
+
 loadHealth();
 loadStats();
+loadVisitStats().then(loadVisitList);
+loadVisitQuestions();
 
 fetch('/me')
   .then(r => r.json())

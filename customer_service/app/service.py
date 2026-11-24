@@ -8,13 +8,17 @@ from __future__ import annotations
 
 import base64
 import binascii
+import hashlib
+import hmac
 import json
 import queue
+import re
 import secrets
 import threading
+import time
 from contextlib import asynccontextmanager
 from typing import Iterator
-from urllib.parse import parse_qs, quote
+from urllib.parse import parse_qs, quote, urlsplit
 
 from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, StreamingResponse
@@ -23,9 +27,10 @@ from pydantic import BaseModel, Field
 
 from customer_service.core import auth
 from customer_service.core import config as cfg
+from customer_service.core import obs as log
 from customer_service.retrieval import index as ridx
 from customer_service.app.pipeline import AnswerResult, ChatPipeline
-from customer_service.core.session import SessionStore
+from customer_service.core.session import SessionStore, local_day
 
 _state: dict = {}
 
@@ -42,7 +47,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title=f"《{cfg.BOOK_NAME}》智能客服", version="0.1.0", lifespan=lifespan)
 
 
-ADMIN_ONLY_PREFIXES = ("/admin", "/events/stats")
+ADMIN_ONLY_PREFIXES = ("/admin", "/events/stats", "/visits")
 PUBLIC_PATHS = ("/login", "/logout", "/favicon.ico")
 
 
@@ -92,7 +97,11 @@ async def require_auth(request: Request, call_next):
         # 浏览器页面只认登录 Cookie：退出后即失效，不会被缓存的 Basic 凭证绕过
         identity = auth.verify(request.cookies.get(cfg.AUTH_COOKIE_NAME))
         if identity is None:
-            target = "/login" + (f"?next={quote(path, safe='/')}" if path != "/" else "")
+            # 保留 query，避免登录回来后丢失 ?from=... 等来源参数
+            target_path = path + (f"?{request.url.query}" if request.url.query else "")
+            target = "/login" + (
+                f"?next={quote(target_path, safe='/')}" if target_path != "/" else ""
+            )
             return RedirectResponse(target, status_code=303)
     else:
         # 登录 Cookie 优先：避免浏览器缓存的 Basic 凭证覆盖当前登录身份
@@ -110,6 +119,156 @@ async def require_auth(request: Request, call_next):
         return JSONResponse(status_code=403, content={"detail": "需要管理员权限"})
     request.state.auth = identity
     return await call_next(request)
+
+
+# ---- 访问来源记录：外层中间件，必须注册在 require_auth 之后（Starlette 后注册先执行）----
+VISIT_SKIP_PATHS = ("/login", "/logout", "/favicon.ico", "/health", "/event", "/admin")
+VISIT_SKIP_PREFIXES = ("/static/", "/visits", "/docs", "/redoc", "/openapi.json")
+_last_purge = {"ts": 0.0}
+
+
+def _visit_store() -> SessionStore | None:
+    """测试未进入 lifespan 时 _state 为空，此处必须容错。"""
+    pipeline = _state.get("pipeline")
+    return pipeline.store if pipeline is not None else None
+
+
+def _is_visit_request(request: Request) -> bool:
+    if request.method != "GET" or request.url.path != "/":
+        return False
+    if "text/html" not in request.headers.get("accept", ""):
+        return False
+    dest = request.headers.get("sec-fetch-dest")
+    if dest and dest != "document":
+        return False
+    mode = request.headers.get("sec-fetch-mode")
+    if mode and mode != "navigate":
+        return False
+    return True
+
+
+def _slug(raw: str) -> str:
+    cleaned = re.sub(r"[^a-z0-9_-]+", "-", (raw or "").strip().lower()).strip("-")
+    return cleaned[: cfg.VISIT_SOURCE_MAX_LEN]
+
+
+def _normalize_source(raw: str) -> str:
+    text = (raw or "").strip().lower()
+    slug = _slug(text)
+    if not slug:
+        return ""
+    if slug == "direct":
+        return "direct"
+    if slug in ("github", "gh"):
+        return "github_unknown"
+    if re.fullmatch(r"[a-z0-9][a-z0-9_-]{0,39}", text):
+        return slug
+    return f"other:{slug}"[:64]
+
+
+def _visit_source(request: Request) -> tuple[str, str, str, str]:
+    """from > utm_source > Referer 主机 > direct；只把 Referer 主机落库。"""
+    query = parse_qs(request.url.query)
+
+    def first(key: str) -> str:
+        return (query.get(key) or [""])[0]
+
+    medium = first("utm_medium")[:64]
+    campaign = first("utm_campaign")[:64]
+    source = _normalize_source(first("from") or first("utm_source"))
+    referer = request.headers.get("referer", "")
+    referer_host = (urlsplit(referer).hostname or "").lower()[:128]
+    if not source:
+        own_host = (request.url.hostname or "").lower()
+        if not referer_host or referer_host == own_host:
+            source = "direct"
+        elif referer_host == "github.com" or referer_host.endswith(".github.com"):
+            source = "github_unknown"
+        else:
+            source = f"other:{referer_host}"[:64]
+    return source, medium, campaign, referer_host
+
+
+def _ua_family(ua: str) -> str:
+    low = ua.lower()
+    if not low:
+        return ""
+    if "micromessenger" in low:
+        return "WeChat"
+    if "edg/" in low:
+        return "Edge"
+    if "chrome" in low or "crios" in low:
+        return "Chrome"
+    if "firefox" in low or "fxios" in low:
+        return "Firefox"
+    if "safari" in low:
+        return "Safari"
+    return "Other"
+
+
+def _is_bot(ua: str) -> bool:
+    low = ua.lower()
+    return any(keyword in low for keyword in cfg.VISIT_BOT_UA)
+
+
+def _visitor_hash(request: Request) -> str:
+    ip = request.client.host if request.client else ""
+    ua = request.headers.get("user-agent", "")
+    digest = hmac.new(
+        cfg.VISIT_HASH_KEY.encode("utf-8"), f"{ip}|{ua}".encode("utf-8"), hashlib.sha256
+    ).hexdigest()
+    return digest[:32]
+
+
+@app.middleware("http")
+async def record_visit(request: Request, call_next):
+    path = request.url.path
+    if (
+        not cfg.VISIT_ENABLED
+        or path in VISIT_SKIP_PATHS
+        or path.startswith(VISIT_SKIP_PREFIXES)
+        or not _is_visit_request(request)
+    ):
+        return await call_next(request)
+
+    store = _visit_store()
+    if store is None:
+        return await call_next(request)
+
+    visitor_id = request.cookies.get(cfg.VISITOR_COOKIE_NAME, "")
+    generated = not visitor_id
+    if generated:
+        visitor_id = secrets.token_urlsafe(16)
+
+    response = await call_next(request)
+
+    try:
+        now = time.time()
+        identity = auth.verify(request.cookies.get(cfg.AUTH_COOKIE_NAME))
+        username, role = identity if identity else ("", "")
+        source, medium, campaign, referer_host = _visit_source(request)
+        ua = request.headers.get("user-agent", "")
+        visit_id = store.log_visit(
+            visited_at=now, path=path, source=source, medium=medium,
+            campaign=campaign, referer_host=referer_host, visitor_id=visitor_id,
+            visitor_hash=_visitor_hash(request), username=username, role=role,
+            ua_family=_ua_family(ua), is_bot=_is_bot(ua), status=response.status_code,
+        )
+        store.upsert_attribution(visitor_id, source, medium, campaign, now, visit_id)
+        if now - _last_purge["ts"] > 3600:
+            _last_purge["ts"] = now
+            store.purge_visits(now - cfg.VISIT_RETENTION_DAYS * 86400)
+    except Exception as exc:  # 埋点失败不影响页面
+        log.flow(f"visit｜记录失败 {type(exc).__name__}: {exc}")
+
+    if generated:
+        response.set_cookie(
+            cfg.VISITOR_COOKIE_NAME, visitor_id,
+            max_age=cfg.VISITOR_COOKIE_DAYS * 86400,
+            httponly=True, samesite="lax", path="/",
+            secure=request.url.scheme == "https",
+        )
+    return response
 
 
 @app.get("/me")
@@ -205,8 +364,14 @@ def _sse(pipeline: ChatPipeline, req: ChatRequest) -> Iterator[str]:
 
 
 @app.post("/chat", response_model=ChatResponse)
-def chat(req: ChatRequest):
+def chat(req: ChatRequest, request: Request):
     pipeline = _pipeline()
+    visitor_id = request.cookies.get(cfg.VISITOR_COOKIE_NAME, "")
+    if visitor_id:
+        identity = getattr(request.state, "auth", None) or ("", "")
+        pipeline.store.bind_visitor_session(
+            req.session_id, visitor_id, identity[0], identity[1]
+        )
     if req.stream:
         return StreamingResponse(_sse(pipeline, req), media_type="text/event-stream")
     return _to_response(pipeline.answer(req.session_id, req.message))
@@ -242,6 +407,58 @@ def event_stats(days: int = 7) -> dict:
             "answer": _rate("click_answer", "impression_answer"),
         },
     }
+
+
+def _visit_window(days: int) -> tuple[int, float, float, str, str]:
+    days = max(1, min(int(days), 365))
+    now = time.time()
+    from_ts = now - days * 86400
+    return days, from_ts, now, local_day(from_ts), local_day(now)
+
+
+@app.get("/visits/stats")
+def visit_stats(days: int = 7, include_bots: int = 0) -> dict:
+    days, from_ts, to_ts, from_day, to_day = _visit_window(days)
+    store = _pipeline().store
+    totals = store.visit_totals(from_ts, to_ts)
+    chat_uv = store.visit_chat_uv(from_ts, to_ts)
+    sources = store.visit_by_source(from_day, to_day, bool(include_bots))
+    for row in sources:
+        uv = row.get("uv") or 0
+        chatted = chat_uv.get(row["source"], 0)
+        row["chat_uv"] = chatted
+        row["chat_rate"] = round(chatted / uv, 4) if uv else 0.0
+    return {
+        "days": days,
+        **totals,
+        "by_source": sources,
+        "by_day": store.visit_by_day(from_day, to_day, bool(include_bots)),
+    }
+
+
+@app.get("/visits")
+def visit_list(days: int = 7, source: str = "", include_bots: int = 0,
+               page: int = 1, page_size: int = 20) -> dict:
+    days, _, _, from_day, to_day = _visit_window(days)
+    page = max(1, int(page))
+    page_size = max(1, min(int(page_size), 200))
+    total, items = _pipeline().store.list_visits(
+        from_day, to_day, source.strip()[:64], bool(include_bots), page, page_size
+    )
+    return {
+        "days": days, "page": page, "page_size": page_size,
+        "total": total, "items": items,
+    }
+
+
+@app.get("/visits/questions")
+def visit_questions(days: int = 30, source: str = "", limit: int = 100) -> dict:
+    days, from_ts, to_ts, _, _ = _visit_window(days)
+    limit = max(1, min(int(limit), 500))
+    items = _pipeline().store.visit_questions(
+        from_ts, to_ts, source.strip()[:64], limit
+    )
+    return {"days": days, "source": source, "items": items}
 
 
 @app.get("/health")
