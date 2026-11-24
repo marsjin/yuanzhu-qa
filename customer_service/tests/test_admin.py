@@ -30,6 +30,8 @@ def test_anonymous_rejected():
     client = TestClient(service.app)
     assert client.get("/").status_code == 401
     assert client.get("/admin").status_code == 401
+    assert client.get("/visits/stats").status_code == 401
+    assert client.get("/visits?days=7").status_code == 401
 
 
 def test_admin_can_access_all():
@@ -45,6 +47,9 @@ def test_admin_page_renders():
     assert "返回对话首页" in resp.text
     assert "/health" in resp.text
     assert "/events/stats" in resp.text
+    assert "访问来源" in resp.text
+    assert "访问明细" in resp.text
+    assert "GitHub 来源提问" in resp.text
 
 
 def test_user_can_chat_but_not_admin():
@@ -54,6 +59,8 @@ def test_user_can_chat_but_not_admin():
     assert client.get("/health", headers=user).status_code == 200
     assert client.get("/admin", headers=user).status_code == 403
     assert client.get("/events/stats?days=7", headers=user).status_code == 403
+    assert client.get("/visits/stats?days=7", headers=user).status_code == 403
+    assert client.get("/visits?days=7", headers=user).status_code == 403
 
 
 def test_user_wrong_password():

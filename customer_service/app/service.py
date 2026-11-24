@@ -30,7 +30,7 @@ from customer_service.core import config as cfg
 from customer_service.core import obs as log
 from customer_service.retrieval import index as ridx
 from customer_service.app.pipeline import AnswerResult, ChatPipeline
-from customer_service.core.session import SessionStore
+from customer_service.core.session import SessionStore, local_day
 
 _state: dict = {}
 
@@ -47,7 +47,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title=f"《{cfg.BOOK_NAME}》智能客服", version="0.1.0", lifespan=lifespan)
 
 
-ADMIN_ONLY_PREFIXES = ("/admin", "/events/stats")
+ADMIN_ONLY_PREFIXES = ("/admin", "/events/stats", "/visits")
 PUBLIC_PATHS = ("/login", "/logout", "/favicon.ico")
 
 
@@ -407,6 +407,60 @@ def event_stats(days: int = 7) -> dict:
             "answer": _rate("click_answer", "impression_answer"),
         },
     }
+
+
+def _visit_window(days: int) -> tuple[int, float, float, str, str]:
+    days = max(1, min(int(days), 365))
+    now = time.time()
+    from_ts = now - days * 86400
+    return days, from_ts, now, local_day(from_ts), local_day(now)
+
+
+@app.get("/visits/stats")
+def visit_stats(days: int = 7, include_bots: int = 0) -> dict:
+    days, from_ts, to_ts, from_day, to_day = _visit_window(days)
+    store = _pipeline().store
+    totals = store.visit_totals(from_ts, to_ts)
+    chat_uv = store.visit_chat_uv(from_ts, to_ts)
+    sources = store.visit_by_source(from_day, to_day, bool(include_bots))
+    for row in sources:
+        uv = row.get("uv") or 0
+        pv = row.get("pv") or 0
+        chatted = chat_uv.get(row["source"], 0)
+        row["chat_uv"] = chatted
+        row["chat_rate"] = round(chatted / uv, 4) if uv else 0.0
+        row["bot_ratio"] = round((row.get("bot_pv") or 0) / pv, 4) if pv else 0.0
+    return {
+        "days": days,
+        **totals,
+        "by_source": sources,
+        "by_day": store.visit_by_day(from_day, to_day, bool(include_bots)),
+    }
+
+
+@app.get("/visits")
+def visit_list(days: int = 7, source: str = "", include_bots: int = 0,
+               page: int = 1, page_size: int = 20) -> dict:
+    days, _, _, from_day, to_day = _visit_window(days)
+    page = max(1, int(page))
+    page_size = max(1, min(int(page_size), 200))
+    total, items = _pipeline().store.list_visits(
+        from_day, to_day, source.strip()[:64], bool(include_bots), page, page_size
+    )
+    return {
+        "days": days, "page": page, "page_size": page_size,
+        "total": total, "items": items,
+    }
+
+
+@app.get("/visits/questions")
+def visit_questions(days: int = 30, source: str = "", limit: int = 100) -> dict:
+    days, from_ts, to_ts, _, _ = _visit_window(days)
+    limit = max(1, min(int(limit), 500))
+    items = _pipeline().store.visit_questions(
+        from_ts, to_ts, source.strip()[:64], limit
+    )
+    return {"days": days, "source": source, "items": items}
 
 
 @app.get("/health")

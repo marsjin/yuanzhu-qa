@@ -61,6 +61,14 @@ def test_anonymous_page_redirects_to_login():
     assert resp.headers["location"] == "/login?next=/admin"
 
 
+def test_redirect_keeps_source_query():
+    client = TestClient(service.app)
+    resp = client.get("/?from=github_readme", headers=HTML, follow_redirects=False)
+    assert resp.status_code == 303
+    from urllib.parse import unquote
+    assert unquote(resp.headers["location"]) == "/login?next=/?from=github_readme"
+
+
 def test_logout_revokes_page_access():
     client = TestClient(service.app)
     _login(client, "admin", "s3cret")

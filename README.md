@@ -8,7 +8,8 @@
 [![Tests](https://github.com/<owner>/<repo>/actions/workflows/ci.yml/badge.svg)](https://github.com/<owner>/<repo>/actions)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 
-🌐 **在线体验**：[https://cs.brandex.top](https://cs.brandex.top)
+🌐 **在线体验**：[https://cs.brandex.top](https://cs.brandex.top/?from=github_readme)
+- 入口链接带 `from` 参数，用于识别来源（`from=github_readme` / `github_badge` / `github_issue`），管理员可在 `/admin` 查看访问来源与「GitHub 来源提问」
 - 体验账号：`jerry` / `change-me-extra`（普通用户，可对话，不能查看管理页）
 - 管理页 `/admin` 与统计 `/events/stats` 仅管理员可访问
 
@@ -25,7 +26,7 @@
 | 复杂推理 | LangGraph **双环 Agent**（补证据环 + 修答案环），硬上限 5 次调用 / 15 步 |
 | 成本控制 | 本书简介 ~12ms / 0 次模型，单章摘录 0 次模型，FAQ / 购买引导 0 次模型 |
 | 产品闭环 | SSE 流式对话、登录会话（60 分钟）、admin/user 双角色、只读管理页 |
-| 运营能力 | 展示 / 点击分流统计与点击率、来源链接带来路标识 `from=cs.brandex.top` |
+| 运营能力 | 展示 / 点击分流与点击率；入站来源识别（`from` / UTM / Referer）、PV/UV 与来源提问归因 |
 
 ## 效果样例
 
