@@ -57,7 +57,7 @@
 
 **技术栈**：FastAPI · LangGraph · LangChain · rank_bm25 · fastembed（BAAI/bge-small-zh-v1.5，本地推理）· jieba · SQLite · Docker Compose
 
-更完整的架构分析见 [docs/phase1-report.md](customer_service/docs/phase1-report.md)（[PDF](customer_service/docs/phase1-report.pdf)）。
+更完整的架构分析见 [docs/phase1-report.md](customer_service/docs/phase1-report.md)。
 
 ## 快速开始
 
