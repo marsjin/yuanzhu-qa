@@ -108,6 +108,8 @@ def test_stats_pv_uv_and_bots(client, store):
              client.get("/visits/stats?days=1&include_bots=0").json()["by_source"]}
     assert human["github_readme"]["pv"] == 3
     assert human["github_readme"]["uv"] == 2
+    assert human["github_readme"]["bot_pv"] == 1
+    assert human["github_readme"]["bot_ratio"] == 0.25
 
 
 def test_list_visits_pagination(client, store):

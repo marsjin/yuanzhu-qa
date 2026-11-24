@@ -264,17 +264,28 @@ class SessionStore:
         }
 
     def visit_by_source(self, from_day: str, to_day: str, include_bots: bool = False) -> list[dict]:
+        """来源维度：PV/UV 可切换是否含爬虫，爬虫占比始终以全部访问为分母。"""
         sql = (
-            "SELECT source, COUNT(*) AS pv, COUNT(DISTINCT NULLIF(visitor_id, '')) AS uv, "
+            "SELECT source, COUNT(*) AS pv_all, "
+            "COALESCE(SUM(CASE WHEN is_bot = 0 THEN 1 ELSE 0 END), 0) AS pv_human, "
+            "COUNT(DISTINCT NULLIF(visitor_id, '')) AS uv_all, "
+            "COUNT(DISTINCT CASE WHEN is_bot = 0 THEN visitor_id END) AS uv_human, "
             "COALESCE(SUM(is_bot), 0) AS bot_pv FROM visits "
-            "WHERE visit_day BETWEEN ? AND ?"
+            "WHERE visit_day BETWEEN ? AND ? GROUP BY source ORDER BY pv_all DESC"
         )
-        if not include_bots:
-            sql += " AND is_bot = 0"
-        sql += " GROUP BY source ORDER BY pv DESC"
         with self._connect() as conn:
             rows = conn.execute(sql, (from_day, to_day)).fetchall()
-        return [dict(r) for r in rows]
+        result = []
+        for row in rows:
+            pv = row["pv_all"] if include_bots else row["pv_human"]
+            result.append({
+                "source": row["source"],
+                "pv": pv,
+                "uv": row["uv_all"] if include_bots else row["uv_human"],
+                "bot_pv": row["bot_pv"],
+                "bot_ratio": round(row["bot_pv"] / row["pv_all"], 4) if row["pv_all"] else 0.0,
+            })
+        return result
 
     def visit_by_day(self, from_day: str, to_day: str, include_bots: bool = False) -> list[dict]:
         sql = (

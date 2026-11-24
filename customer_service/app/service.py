@@ -425,11 +425,9 @@ def visit_stats(days: int = 7, include_bots: int = 0) -> dict:
     sources = store.visit_by_source(from_day, to_day, bool(include_bots))
     for row in sources:
         uv = row.get("uv") or 0
-        pv = row.get("pv") or 0
         chatted = chat_uv.get(row["source"], 0)
         row["chat_uv"] = chatted
         row["chat_rate"] = round(chatted / uv, 4) if uv else 0.0
-        row["bot_ratio"] = round((row.get("bot_pv") or 0) / pv, 4) if pv else 0.0
     return {
         "days": days,
         **totals,
